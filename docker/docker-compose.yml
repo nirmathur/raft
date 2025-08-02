@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: raft
+      POSTGRES_PASSWORD: raft
+      POSTGRES_DB: raft
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "raft"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  chroma:
+    image: chromadb/chroma:latest
+    ports: ["8000:8000"]
+    depends_on: [postgres]
+
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]

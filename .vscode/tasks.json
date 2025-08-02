@@ -1,0 +1,18 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "RAFT: pytest",
+      "type": "shell",
+      "command": "poetry run pytest -q",
+      "group": "test",
+      "presentation": { "reveal": "always" }
+    },
+    {
+      "label": "RAFT: run governor",
+      "type": "shell",
+      "command": "poetry run python -m agent.core.governor",
+      "presentation": { "reveal": "always" }
+    }
+  ]
+}

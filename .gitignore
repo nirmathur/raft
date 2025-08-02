@@ -1,0 +1,11 @@
+# Byte-code & cache
+__pycache__/
+*.py[cod]
+*.pyo
+# VS Code, Cursor artefacts
+.vscode/
+# Logs & runtime
+logs/
+*.log
+# OS junk
+.DS_Store
