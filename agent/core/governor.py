@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from agent.core.escape_hatches import is_paused, start_watchdog
+
+start_watchdog()
+
 """RAFT Governor — Beta
 
 Responsibility:
@@ -23,6 +27,7 @@ import numpy as np
 from loguru import logger
 
 from agent.core.charter import load_clauses
+from agent.core.energy_guard import measure_block
 from agent.core.event_log import record
 from agent.core.smt_verifier import verify  # real Z3 wrapper (Beta)
 # ────────────────── internal imports (raft core) ─────────────────────────
@@ -48,12 +53,16 @@ def _fake_jacobian() -> np.ndarray:  # placeholder while no model params
 
 
 def _build_smt_diff() -> str:
-    """Return SMT‑LIB2 representation of the *proposed* self‑mod diff.
+    """Return SMT-LIB2 representation of the *proposed* self-mod diff.
 
     In Alpha this was a stub; for Beta we still fake it but keep the API so
-    later stages can replace with a real diff‑to‑SMT transformer.
+    later stages can replace with a real diff-to-SMT transformer.
     """
-    return "(assert true)"  # always provable → passes verifier
+    # TODO: Replace with real diff from VCS
+    proposed_diff_text = "example diff text"
+    from agent.core.diff_builder import build_smt_diff
+
+    return build_smt_diff(proposed_diff_text)
 
 
 # ────────────────── public entry‑point ───────────────────────────────────
@@ -73,34 +82,40 @@ def run_one_cycle() -> bool:
         True  if cycle completes and state is (conceptually) committed
         False if any guard aborts (rollback implied).
     """
+    macs_estimate = 1_000_000_000  # TODO: real count when brain added
 
-    # 1 ─── Z3 proof gate
-    diff = _build_smt_diff()
-    if not verify(diff, CHARTER_HASH):
-        logger.error("Z3 gate rejected self‑mod — charter clause xˣ‑22a")
+    with measure_block(macs_estimate):
+        # 1 ─── Z3 proof gate
+        diff = _build_smt_diff()
+        if not verify(diff, CHARTER_HASH):
+            logger.error("Z3 gate rejected self‑mod — charter clause xˣ‑22a")
+            record(
+                "proof‑fail",
+                {"diff": diff, "charter_hash": CHARTER_HASH[:8]},
+            )
+            return False
+
+        # 2 ─── Spectral‑radius guard (xˣ‑17)
+        J = _fake_jacobian()
+        rho = spectral_radius(J)
+        if rho >= MAX_SPECTRAL_RADIUS:
+            logger.error(
+                "Spectral radius %.3f ≥ limit %.2f — rollback", rho, MAX_SPECTRAL_RADIUS
+            )
+            record("spectral‑breach", {"rho": rho})
+            return False
+
+        # 3 ─── Commit + log success
         record(
-            "proof‑fail",
-            {"diff": diff, "charter_hash": CHARTER_HASH[:8]},
+            "cycle‑complete",
+            {"rho": rho, "charter": CHARTER_HASH[:8]},
         )
-        return False
+        logger.info("cycle‑complete (ρ=%.3f)", rho)
 
-    # 2 ─── Spectral‑radius guard (xˣ‑17)
-    J = _fake_jacobian()
-    rho = spectral_radius(J)
-    if rho >= MAX_SPECTRAL_RADIUS:
-        logger.error(
-            "Spectral radius %.3f ≥ limit %.2f — rollback", rho, MAX_SPECTRAL_RADIUS
-        )
-        record("spectral‑breach", {"rho": rho})
-        return False
+        if is_paused():
+            return False
 
-    # 3 ─── Commit + log success
-    record(
-        "cycle‑complete",
-        {"rho": rho, "charter": CHARTER_HASH[:8]},
-    )
-    logger.info("cycle‑complete (ρ=%.3f)", rho)
-    return True
+        return True
 
 
 if __name__ == "__main__":  # convenience CLI

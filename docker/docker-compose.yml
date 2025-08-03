@@ -29,3 +29,14 @@ services:
   ollama:
     image: ollama/ollama:latest
     ports: ["11434:11434"]
+
+  operator:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ..:/app
+    command: bash -c "pip install -e . && uvicorn agent.core.operator_api:app --host 0.0.0.0 --port 8001"
+    environment:
+      - OPERATOR_TOKEN=changeme123
+    ports: ["8001:8001"]
+    depends_on: [redis]
