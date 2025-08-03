@@ -5,3 +5,10 @@ repos:
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
     hooks: [{ id: isort }]
+
+  - repo: local
+    hooks:
+      - id: charter-id-check
+        name: Charter-ID pattern
+        entry: scripts/check_charter_ids.sh
+        language: script

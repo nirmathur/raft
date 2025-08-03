@@ -13,7 +13,7 @@ services:
       interval: 5s
       retries: 10
 
-  redis:
+  redis:                       # ← now correctly nested
     image: redis:7-alpine
     ports: ["6379:6379"]
     healthcheck:
