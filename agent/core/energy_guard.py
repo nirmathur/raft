@@ -34,7 +34,7 @@ def _read_joules() -> float:
     Read cumulative energy consumed (J) since the module was first sampled.
 
     Uses RAPL for CPU if available; otherwise falls back to a time-based estimate
-    at 50% of the HERMES baseline.
+    at 50% of the HERMES baseline per Charter clause xˣ-29.
     """
     global _last_sample_time, _last_total_joules
 
@@ -51,20 +51,21 @@ def _read_joules() -> float:
         except Exception:
             total_j = None
 
-    # Fallback: estimate from wall-clock time at 1% of baseline (more conservative)
-    if total_j is None:
-        elapsed = now - _last_sample_time
-        total_j = (
-            _last_total_joules + elapsed * HERMES_BASELINE_JOULES_PER_SECOND * 0.01
-        )
-
     # First invocation: initialize state and return zero delta
     if _last_total_joules == 0.0:
         _last_sample_time = now
-        _last_total_joules = total_j
+        _last_total_joules = 0.0
         return 0.0
 
-    # Compute delta since last sample
+    # Fallback: compute exactly one delta per call at 50% of baseline
+    if total_j is None:
+        elapsed = now - _last_sample_time
+        delta = elapsed * HERMES_BASELINE_JOULES_PER_SECOND * 0.5
+        _last_sample_time = now
+        _last_total_joules += delta
+        return delta
+
+    # RAPL available: compute delta since last sample
     delta = total_j - _last_total_joules
     _last_sample_time = now
     _last_total_joules = total_j
