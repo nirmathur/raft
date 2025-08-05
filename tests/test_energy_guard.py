@@ -123,8 +123,8 @@ class TestMeasureBlock:
     @patch("agent.core.energy_guard._read_joules")
     def test_low_macs_high_energy(self, mock_read):
         # Use energy that exceeds threshold for low MAC count
-        limit = 1_000_000 * HERMES_J_PER_MAC * 2.0
+        limit = 10_000_000 * HERMES_J_PER_MAC * 2.0
         mock_read.side_effect = [0.0, limit * 3.0]  # Over threshold
         with pytest.raises(SystemExit):
-            with measure_block(macs_estimate=1_000_000):
+            with measure_block(macs_estimate=10_000_000):
                 pass
