@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import time
+
 from agent.core.escape_hatches import is_paused, start_watchdog
+from agent.metrics import (CHARTER_VIOLATIONS, CYCLE_COUNT, CYCLE_DURATION,
+                           ENERGY_RATE, PROC_LATENCY, PROOF_FAILURE,
+                           PROOF_SUCCESS, SPECTRAL_RHO, SPECTRAL_THRESHOLD)
 
 start_watchdog()
 
@@ -84,33 +89,53 @@ def run_one_cycle() -> bool:
     """
     macs_estimate = 1_000_000_000  # TODO: real count when brain added
 
-    with measure_block(macs_estimate):
+    # Set spectral threshold metric
+    SPECTRAL_THRESHOLD.set(MAX_SPECTRAL_RADIUS)
+
+    with PROC_LATENCY.time():
         # 1 ─── Z3 proof gate
         diff = _build_smt_diff()
-        if not verify(diff, CHARTER_HASH):
+        ok = verify(diff, CHARTER_HASH)
+        if ok:
+            PROOF_SUCCESS.inc()
+        else:
             logger.error("Z3 gate rejected self‑mod — charter clause xˣ‑22a")
             record(
                 "proof‑fail",
                 {"diff": diff, "charter_hash": CHARTER_HASH[:8]},
             )
+            PROOF_FAILURE.inc()
+            CHARTER_VIOLATIONS.labels(clause="x^x-22a").inc()
             return False
 
         # 2 ─── Spectral‑radius guard (xˣ‑17)
         J = _fake_jacobian()
         rho = spectral_radius(J)
+        SPECTRAL_RHO.set(rho)
+
         if rho >= MAX_SPECTRAL_RADIUS:
             logger.error(
                 "Spectral radius %.3f ≥ limit %.2f — rollback", rho, MAX_SPECTRAL_RADIUS
             )
             record("spectral‑breach", {"rho": rho})
+            CHARTER_VIOLATIONS.labels(clause="x^x-17").inc()
             return False
 
-        # 3 ─── Commit + log success
+        # 3 ─── Energy guard with metrics
+        with measure_block(macs_estimate) as used_joules:
+            if used_joules > 0:
+                energy_rate = used_joules / (macs_estimate / 1e9)  # J/s
+                ENERGY_RATE.set(energy_rate)
+
+        # 4 ─── Commit + log success
         record(
             "cycle‑complete",
             {"rho": rho, "charter": CHARTER_HASH[:8]},
         )
         logger.info("cycle‑complete (ρ=%.3f)", rho)
+
+        # Update cycle metrics
+        CYCLE_COUNT.inc()
 
         if is_paused():
             return False
@@ -119,5 +144,10 @@ def run_one_cycle() -> bool:
 
 
 if __name__ == "__main__":  # convenience CLI
+    from prometheus_client import start_http_server
+
+    # Start Prometheus metrics server
+    start_http_server(8002)  # expose /metrics on port 8002
+
     completed = run_one_cycle()
     exit(0 if completed else 1)
