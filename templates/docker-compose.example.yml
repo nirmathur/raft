@@ -1,0 +1,13 @@
+  example-agent:
+    build:
+      context: .
+      dockerfile: templates/Dockerfile.example
+    environment:
+      - OPERATOR_TOKEN=${OPERATOR_TOKEN:-changeme123}
+      - ENERGY_GUARD_ENABLED=true
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs

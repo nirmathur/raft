@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#
+# RAFT-Beta background agent entrypoint
+#
+# This script is cloned by Cursor into the remote VM and exec’d.
+# It must be executable (chmod +x raft-beta).
+
+set -euo pipefail
+cd "$(dirname "$0")/."           # make sure we run in the repo root
+export OPERATOR_TOKEN=devtoken    # your operator API token
+export ENERGY_GUARD_ENABLED=true  # turn on the energy‐guard stub
+
+# run the fuzz script with 5 000 diffs
+poetry run python scripts/fuzz_proofs.py 5000

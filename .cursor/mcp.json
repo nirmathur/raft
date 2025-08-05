@@ -1,0 +1,11 @@
+{
+    "background": {
+      "templates": {
+        "raft-beta": {
+          "image": "python:3.11-slim",
+          "init": "apt-get update -y && apt-get install -y git && pip install poetry && git clone $C8_PROJECT_REPO repo && cd repo && poetry install && docker compose up -d redis"
+        }
+      }
+    }
+  }
+  
