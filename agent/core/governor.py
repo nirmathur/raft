@@ -32,6 +32,7 @@ import numpy as np
 from loguru import logger
 
 from agent.core.charter import load_clauses
+from agent.core.drift_monitor import DriftAlert, DriftMonitor
 from agent.core.energy_guard import measure_block
 from agent.core.event_log import record
 from agent.core.smt_verifier import verify  # real Z3 wrapper (Beta)
@@ -48,6 +49,9 @@ CHARTER_HASH = hashlib.sha256(CHARTER_PATH.read_bytes()).hexdigest()
 MAX_SPECTRAL_RADIUS: float = 0.9
 
 # Redis proof‑cache TTL is set inside smt_verifier (24 h)
+
+# Initialize drift monitor (global instance for multi-cycle tracking)
+_drift_monitor = DriftMonitor()
 
 # ────────────────── helpers (to be replaced in Pilot) ───────────────────
 
@@ -119,6 +123,23 @@ def run_one_cycle() -> bool:
             )
             record("spectral‑breach", {"rho": rho})
             CHARTER_VIOLATIONS.labels(clause="x^x-17").inc()
+            return False
+
+        # 2.5 ─── Multi-cycle drift detection (xˣ-19, xˣ-24, xˣ-25)
+        try:
+            _drift_monitor.record(rho)
+        except DriftAlert as e:
+            logger.error(
+                "Drift alert triggered: %s (mean=%.4f, max=%.4f)", 
+                str(e), e.mean_drift, e.max_drift
+            )
+            record("drift‑alert", {
+                "rho": rho, 
+                "mean_drift": e.mean_drift, 
+                "max_drift": e.max_drift,
+                "window": _drift_monitor.current_window
+            })
+            CHARTER_VIOLATIONS.labels(clause="x^x-19").inc()
             return False
 
         # 3 ─── Energy guard with metrics

@@ -14,6 +14,12 @@ RAFT is a recursive agent system with formal trust guarantees, featuring spectra
 - `OPERATOR_TOKEN`: Bearer token for operator API authentication (default: "devtoken")
 - `ENERGY_GUARD_ENABLED`: Enable/disable energy monitoring (default: "true", set to "false" to disable)
 
+#### Drift Detection Configuration
+- `DRIFT_WINDOW`: Size of sliding window for spectral radius drift detection (default: "10")
+  - Controls how many recent cycles are considered when calculating drift metrics
+  - Larger windows provide more stable drift detection but slower response to changes
+  - Smaller windows are more sensitive but may trigger false alerts on normal variations
+
 ### Ports
 
 The system uses the following ports:
