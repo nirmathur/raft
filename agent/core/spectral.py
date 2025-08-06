@@ -1,7 +1,8 @@
 # agent/core/spectral.py
 import numpy as np
 import torch
-import torch.func
+from torch.autograd.functional import jvp, vjp
+from torch.func import jacfwd
 from typing import Callable
 
 
@@ -27,7 +28,7 @@ def full_jacobian(f: Callable, x: torch.Tensor) -> torch.Tensor:
     torch.Tensor
         Jacobian matrix of shape (output_dim, input_dim)
     """
-    return torch.func.jacfwd(f)(x)
+    return jacfwd(f)(x)
 
 
 def estimate_spectral_radius(
@@ -67,39 +68,39 @@ def estimate_spectral_radius(
     # For power iteration, we'll use J^T @ J for rectangular matrices
     is_square = (input_dim == output_dim)
     
-    # Initialize random vector for power iteration
-    torch.manual_seed(42)  # For reproducibility
+    # Initialize random vector for power iteration with fresh generator
+    g = torch.Generator(device=x.device)
+    g.manual_seed(torch.randint(0, 2**31-1, (1,), device=x.device).item())
     if is_square:
-        v = torch.randn(input_dim, dtype=x.dtype, device=x.device)
+        v = torch.randn(input_dim, generator=g, device=x.device, dtype=x.dtype)
     else:
         # For rectangular matrices, work with J^T @ J (which is square)
-        v = torch.randn(input_dim, dtype=x.dtype, device=x.device)
+        v = torch.randn(input_dim, generator=g, device=x.device, dtype=x.dtype)
     
     # Normalize initial vector
     v = v / torch.norm(v)
     
+    # Flatten x for JVP computation - define once outside loop
+    x_flat = x.view(-1)
+    
+    # Define function that operates on flattened inputs - define once outside loop
+    def f_flat(x_flat_inner):
+        x_reshaped = x_flat_inner.view(x.shape)
+        return f(x_reshaped).view(-1)
+    
     # Power iteration
     for _ in range(n_iter):
-        # Flatten x for JVP computation
-        x_flat = x.view(-1)
-        
-        # Define function that operates on flattened inputs
-        def f_flat(x_flat_inner):
-            x_reshaped = x_flat_inner.view(x.shape)
-            return f(x_reshaped).view(-1)
-        
         if is_square:
             # For square matrices: compute J @ v using JVP
-            _, jvp_result = torch.func.jvp(f_flat, (x_flat,), (v,))
+            _, jvp_result = jvp(f_flat, (x_flat,), (v,))
             v_new = jvp_result
         else:
             # For rectangular matrices: compute J^T @ (J @ v)
             # First compute J @ v
-            _, jv = torch.func.jvp(f_flat, (x_flat,), (v,))
+            _, jv = jvp(f_flat, (x_flat,), (v,))
             
             # Then compute J^T @ (J @ v) using VJP
-            _, vjp_fn = torch.func.vjp(f_flat, x_flat)
-            v_new = vjp_fn(jv)[0]
+            _, v_new = vjp(f_flat, x_flat, jv)
         
         # Normalize
         norm = torch.norm(v_new)
@@ -109,19 +110,15 @@ def estimate_spectral_radius(
             break
     
     # Estimate eigenvalue: v^T @ (matrix @ v) / (v^T @ v)
-    x_flat = x.view(-1)
-    def f_flat(x_flat_inner):
-        x_reshaped = x_flat_inner.view(x.shape)
-        return f(x_reshaped).view(-1)
-    
     if is_square:
-        _, jvp_result = torch.func.jvp(f_flat, (x_flat,), (v,))
+        _, jvp_result = jvp(f_flat, (x_flat,), (v,))
         eigenval_estimate = torch.dot(v, jvp_result)
     else:
         # For rectangular matrices, the eigenvalue of J^T @ J
-        _, jv = torch.func.jvp(f_flat, (x_flat,), (v,))
-        _, vjp_fn = torch.func.vjp(f_flat, x_flat)
-        jtjv = vjp_fn(jv)[0]
+        _, jv = jvp(f_flat, (x_flat,), (v,))
+        _, jtjv = vjp(f_flat, x_flat, jv)
         eigenval_estimate = torch.dot(v, jtjv)
+        # Return sqrt for J^T @ J to get singular value (spectral radius of J)
+        return float(torch.sqrt(torch.abs(eigenval_estimate)))
     
     return float(torch.abs(eigenval_estimate))

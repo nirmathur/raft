@@ -186,15 +186,17 @@ class TestSimpleNetSpectralRadius:
             assert not np.isnan(rho)
     
     def test_reproducibility(self):
-        """Test that spectral radius estimation is reproducible."""
+        """Test that spectral radius estimation is reproducible with manual seeding."""
         model = SimpleNet(in_dim=3, out_dim=3, hidden_dim=6)
         x = torch.tensor([1.0, 0.5, -0.5], requires_grad=True)
         
-        # Run estimation multiple times
+        # Run estimation multiple times with manual seeding
+        torch.manual_seed(0)
         rho1 = estimate_spectral_radius(model, x, n_iter=10)
+        torch.manual_seed(0)
         rho2 = estimate_spectral_radius(model, x, n_iter=10)
         
-        # Should be identical due to fixed seed in power iteration
+        # Should be identical due to manual seeding
         assert abs(rho1 - rho2) < 1e-6
     
     def test_non_square_jacobian(self):

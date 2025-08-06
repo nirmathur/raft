@@ -117,7 +117,7 @@ def run_one_cycle() -> bool:
         # 2 ─── Spectral‑radius guard (xˣ‑17)
         # Use real PyTorch-based spectral radius estimation
         x0 = torch.randn(4, requires_grad=True)  # Random input point
-        rho = estimate_spectral_radius(_SPECTRAL_MODEL, x0, n_iter=10)
+        rho = _SPECTRAL_MODEL.estimate_spectral_radius(x0, n_iter=10)
         SPECTRAL_RHO.set(rho)
 
         if rho >= MAX_SPECTRAL_RADIUS:
