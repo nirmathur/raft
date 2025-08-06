@@ -35,10 +35,10 @@ from loguru import logger
 from agent.core.charter import load_clauses
 from agent.core.energy_guard import measure_block
 from agent.core.event_log import record
+from agent.core.model import SimpleNet
 from agent.core.smt_verifier import verify  # real Z3 wrapper (Beta)
 # ────────────────── internal imports (raft core) ─────────────────────────
-from agent.core.spectral import spectral_radius, estimate_spectral_radius
-from agent.core.model import SimpleNet
+from agent.core.spectral import estimate_spectral_radius, spectral_radius
 
 # ────────────────── charter & constants ─────────────────────────────────
 
@@ -55,7 +55,7 @@ MAX_SPECTRAL_RADIUS: float = 0.9
 
 # Global model instance for spectral analysis
 # In production, this would be the actual cognitive model
-_SPECTRAL_MODEL = SimpleNet(in_dim=4, out_dim=4, hidden_dim=16)
+_SPECTRAL_MODEL = SimpleNet.create_stable_model(in_dim=4, out_dim=4, target_rho=0.8)
 
 
 def _fake_jacobian() -> np.ndarray:  # placeholder while no model params

@@ -515,6 +515,12 @@ This implementation satisfies charter clause x^x-17 by providing:
 - Configurable thresholds and iteration counts
 - Comprehensive logging and metrics
 
+### Stable-model helper
+
+`SimpleNet.create_stable_model(in_dim, out_dim, target_rho=0.8, method='xavier')`
+returns a network whose initial spectral radius is _guaranteed_ below
+`target_rho`.  It is what the governor loads by default.
+
 
 
 

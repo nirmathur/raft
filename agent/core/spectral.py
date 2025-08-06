@@ -1,9 +1,10 @@
 # agent/core/spectral.py
+from typing import Callable
+
 import numpy as np
 import torch
 from torch.autograd.functional import jvp, vjp
 from torch.func import jacfwd
-from typing import Callable
 
 
 def spectral_radius(matrix: np.ndarray) -> float:
@@ -14,7 +15,7 @@ def spectral_radius(matrix: np.ndarray) -> float:
 
 def full_jacobian(f: Callable, x: torch.Tensor) -> torch.Tensor:
     """Compute the full Jacobian matrix of function f at point x.
-    
+
     Parameters
     ----------
     f : Callable
@@ -22,7 +23,7 @@ def full_jacobian(f: Callable, x: torch.Tensor) -> torch.Tensor:
         and return a tensor output.
     x : torch.Tensor
         Point at which to evaluate the Jacobian.
-        
+
     Returns
     -------
     torch.Tensor
@@ -32,18 +33,18 @@ def full_jacobian(f: Callable, x: torch.Tensor) -> torch.Tensor:
 
 
 def estimate_spectral_radius(
-    f: Callable, 
-    x: torch.Tensor, 
+    f: Callable,
+    x: torch.Tensor,
     n_iter: int = 5,
     tolerance: float = 1e-6,
-    batch_mode: bool = False
+    batch_mode: bool = False,
 ) -> float:
     """Estimate spectral radius using power iteration on Jacobian-vector products.
-    
+
     This function uses the power iteration method to estimate the largest eigenvalue
     (in magnitude) of the Jacobian matrix of f at point x, without explicitly
     computing the full Jacobian matrix.
-    
+
     Parameters
     ----------
     f : Callable
@@ -56,7 +57,7 @@ def estimate_spectral_radius(
         Convergence tolerance for early stopping (default: 1e-6)
     batch_mode : bool, optional
         If True, handle x as batch of inputs and return averaged spectral radius
-        
+
     Returns
     -------
     float
@@ -71,12 +72,12 @@ def estimate_spectral_radius(
             # Batch case - process each sample
             batch_size = x.shape[0]
             spectral_radii = []
-            
+
             for i in range(batch_size):
                 x_i = x[i]
                 rho_i = _estimate_single_spectral_radius(f, x_i, n_iter, tolerance)
                 spectral_radii.append(rho_i)
-            
+
             # Return average spectral radius across batch
             return float(torch.tensor(spectral_radii).mean())
     else:
@@ -85,13 +86,10 @@ def estimate_spectral_radius(
 
 
 def _estimate_single_spectral_radius(
-    f: Callable, 
-    x: torch.Tensor, 
-    n_iter: int, 
-    tolerance: float
+    f: Callable, x: torch.Tensor, n_iter: int, tolerance: float
 ) -> float:
     """Estimate spectral radius for a single input vector.
-    
+
     Parameters
     ----------
     f : Callable
@@ -102,7 +100,7 @@ def _estimate_single_spectral_radius(
         Maximum number of power iterations
     tolerance : float
         Convergence tolerance for early stopping
-        
+
     Returns
     -------
     float
@@ -111,38 +109,38 @@ def _estimate_single_spectral_radius(
     # Ensure x is 1D and requires gradients
     if x.dim() != 1:
         raise ValueError(f"Single input must be 1D, got {x.dim()}D tensor")
-    
+
     # Ensure x requires gradients
     x = x.detach().requires_grad_(True)
-    
+
     # Get function output to determine dimensions
     y = f(x)
     input_dim = x.numel()
     output_dim = y.numel()
-    
+
     # For non-square Jacobians, we need to consider the appropriate matrix
     # For power iteration, we'll use J^T @ J for rectangular matrices
-    is_square = (input_dim == output_dim)
-    
+    is_square = input_dim == output_dim
+
     # Initialize random vector for power iteration with fresh device-aware generator
     g = torch.Generator(device=x.device)
-    g.manual_seed(torch.randint(0, 2**31-1, (1,), device=x.device).item())
+    g.manual_seed(torch.randint(0, 2**31 - 1, (1,), device=x.device).item())
     v = torch.randn(input_dim, generator=g, device=x.device, dtype=x.dtype)
-    
+
     # Normalize initial vector
     v = v / torch.norm(v)
-    
+
     # Flatten x for JVP computation - define once outside loop
     x_flat = x.view(-1)
-    
+
     # Define function that operates on flattened inputs - define once outside loop
     def f_flat(x_flat_inner):
         x_reshaped = x_flat_inner.view(x.shape)
         return f(x_reshaped).view(-1)
-    
+
     # Power iteration with convergence checking
     prev_rho = 0.0
-    
+
     for iteration in range(n_iter):
         if is_square:
             # For square matrices: compute J @ v using JVP
@@ -152,17 +150,17 @@ def _estimate_single_spectral_radius(
             # For rectangular matrices: compute J^T @ (J @ v)
             # First compute J @ v
             _, jv = jvp(f_flat, (x_flat,), (v,))
-            
+
             # Then compute J^T @ (J @ v) using VJP
             _, v_new = vjp(f_flat, x_flat, jv)
-        
+
         # Normalize
         norm = torch.norm(v_new)
         if norm > 1e-10:  # Avoid division by zero
             v = v_new / norm
         else:
             break
-        
+
         # Estimate current spectral radius for convergence check
         if iteration > 0:  # Skip first iteration
             if is_square:
@@ -172,13 +170,13 @@ def _estimate_single_spectral_radius(
                 _, jv_check = jvp(f_flat, (x_flat,), (v,))
                 _, jtjv_check = vjp(f_flat, x_flat, jv_check)
                 current_rho = float(torch.sqrt(torch.abs(torch.dot(v, jtjv_check))))
-            
+
             # Check convergence
             if abs(current_rho - prev_rho) < tolerance:
                 break
-                
+
             prev_rho = current_rho
-    
+
     # Estimate eigenvalue: v^T @ (matrix @ v) / (v^T @ v)
     if is_square:
         _, jvp_result = jvp(f_flat, (x_flat,), (v,))

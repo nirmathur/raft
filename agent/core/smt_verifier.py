@@ -14,7 +14,7 @@ import redis
 from z3 import Solver, parse_smt2_string, sat
 
 # ───────────────────────── config ──────────────────────────
-REDIS = redis.Redis(host="host.docker.internal", port=6379, decode_responses=True)
+REDIS = redis.Redis(host="localhost", port=6379, decode_responses=True)
 TTL = 60 * 60 * 24  # 24 h
 # ───────────────────────────────────────────────────────────
 
