@@ -186,6 +186,8 @@ class SMTBenchmarker:
             process = psutil.Process()
             return process.memory_info().rss / 1024 / 1024  # Convert to MB
         except ImportError:
+            if self.verbose:
+                print("[BENCHMARK] psutil missing – memory not sampled")
             return 0.0  # psutil not available
     
     def benchmark_diff(self, diff_text: str, description: str) -> BenchmarkResult:
@@ -216,7 +218,7 @@ class SMTBenchmarker:
         # Get additional context
         context = analyze_diff_context(diff_text)
         
-        # Import SMT builder to check goal preservation violations
+        # Check goal preservation violations
         from agent.core.diff_builder import _smt_builder
         has_goal_violations = bool(_smt_builder._find_goal_preservation_violations(ast))
         

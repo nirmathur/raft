@@ -55,6 +55,8 @@ RAFT includes a sophisticated SMT-LIB2 based Git diff analyzer that uses Z3py to
 1. **No forbidden API calls** - Detects dangerous operations like `exec()`, `subprocess`, `eval()`, etc.
 2. **Goal preservation** - Ensures function renames preserve their signatures
 
+**Important**: Signature mismatch returns `(assert false)` and bumps risk ≥ 0.9.
+
 **Charter clauses (`x^x-22`, `x^x-23`, …) are injected at build time; see `get_forbidden_patterns()`.**
 
 ### Core Components

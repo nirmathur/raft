@@ -418,7 +418,8 @@ def test_charter_pattern_merging():
         'x^x-99': 'No pickle allowed'  # Should add pickle pattern
     }
     
-    patterns = get_forbidden_patterns(charter_clauses)
+    compiled_patterns = get_forbidden_patterns(charter_clauses)
+    patterns = [p.pattern for p in compiled_patterns]
     
     # Should include all default patterns
     for default_pattern in DEFAULT_FORBIDDEN_PATTERNS:
@@ -430,6 +431,31 @@ def test_charter_pattern_merging():
     
     # Should be more than just defaults
     assert len(patterns) > len(DEFAULT_FORBIDDEN_PATTERNS)
+
+
+def test_overlapping_regex_deduplication():
+    """Test that overlapping regex patterns are properly deduplicated."""
+    from agent.core.diff_builder import get_forbidden_patterns
+    
+    charter_clauses = {
+        'x^x-98': 'forbidden `exec` - Execution forbidden',  # Should not duplicate existing exec pattern
+        'x^x-99': 'forbidden `subprocess` - Also forbidden',  # Should not duplicate existing subprocess
+        'x^x-100': 'forbidden `new_pattern` - New pattern'  # Should add new pattern
+    }
+    
+    compiled_patterns = get_forbidden_patterns(charter_clauses)
+    patterns = [p.pattern for p in compiled_patterns]
+    
+    # Check that exec pattern appears only once
+    exec_count = sum(1 for p in patterns if 'exec' in p)
+    assert exec_count == 1  # Should only have the original \bexec\b pattern
+    
+    # Check that subprocess pattern appears only once
+    subprocess_count = sum(1 for p in patterns if 'subprocess' in p)
+    assert subprocess_count == 1  # Should only have the original \bsubprocess\b pattern
+    
+    # Check that new pattern was added
+    assert r'\bnew_pattern\b' in patterns
 
 
 def test_enhanced_function_rename_detection():
@@ -483,6 +509,37 @@ def test_line_number_tracking():
     assert added_line2.new_line_number == 13
     assert added_line2.old_line_number is None
     assert "z = 4" in added_line2.content
+
+
+def test_multi_hunk_line_number_tracking():
+    """Test that line numbers reset correctly across multiple hunks."""
+    diff_text = """diff --git a/test.py b/test.py
+@@ -10,3 +10,4 @@
+ def first_func():
+     x = 1
++    # First hunk addition
+     return x
+@@ -20,3 +21,4 @@
+ def second_func():
+     y = 2
++    # Second hunk addition
+     return y
+"""
+    
+    ast = parse_diff_to_ast(diff_text)
+    
+    # Check added lines from both hunks
+    assert len(ast.added_lines) == 2
+    
+    # First hunk addition
+    first_addition = ast.added_lines[0]
+    assert first_addition.new_line_number == 12  # Line 10 + 2 down
+    assert "First hunk addition" in first_addition.content
+    
+    # Second hunk addition (line numbers should reset)
+    second_addition = ast.added_lines[1]
+    assert second_addition.new_line_number == 23  # Line 21 + 2 down
+    assert "Second hunk addition" in second_addition.content
 
 
 def test_signature_mismatch_returns_false():

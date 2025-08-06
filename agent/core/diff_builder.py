@@ -36,17 +36,18 @@ DEFAULT_FORBIDDEN_PATTERNS = [
     r"\blocals\b",  # local manipulation
 ]
 
-# Cache for merged patterns to avoid recomputation
+# Cache for compiled patterns to avoid recomputation
 _pattern_cache = {}
 
-def get_forbidden_patterns(charter: Dict[str, str] = None) -> List[str]:
+def get_forbidden_patterns(charter: Dict[str, str] = None) -> List[re.Pattern]:
     """Get forbidden patterns merged with charter clauses.
     
     Charter clauses that contain regex patterns will be added to the default
-    forbidden patterns. Uses caching to avoid recomputation.
+    forbidden patterns. Returns compiled regex patterns for performance.
+    Uses caching to avoid recompilation.
     """
     if charter is None:
-        return DEFAULT_FORBIDDEN_PATTERNS
+        charter = {}
     
     # Create cache key from charter clauses
     cache_key = tuple(sorted(charter.items()))
@@ -63,7 +64,6 @@ def get_forbidden_patterns(charter: Dict[str, str] = None) -> List[str]:
             # Try to extract regex pattern from clause text
             # This is a simplified heuristic - in practice, charter clauses would have
             # a more structured format for defining patterns
-            import re
             pattern_matches = re.findall(r'`([^`]+)`', clause_text)  # Look for `pattern`
             for pattern in pattern_matches:
                 # Convert simple words to regex word boundaries
@@ -78,8 +78,18 @@ def get_forbidden_patterns(charter: Dict[str, str] = None) -> List[str]:
             if 'shell' in clause_text.lower():
                 patterns.append(r'\bshell\b')
     
-    _pattern_cache[cache_key] = patterns
-    return patterns
+    # Remove duplicates while preserving order
+    unique_patterns = []
+    seen = set()
+    for pattern in patterns:
+        if pattern not in seen:
+            unique_patterns.append(pattern)
+            seen.add(pattern)
+    
+    # Compile patterns for performance
+    compiled_patterns = [re.compile(pattern) for pattern in unique_patterns]
+    _pattern_cache[cache_key] = compiled_patterns
+    return compiled_patterns
 # ------------------------------------------------------------------------- #
 
 
@@ -284,10 +294,9 @@ class GitDiffParser:
 class SMTDiffBuilder:
     """Builds SMT-LIB2 formulas from Git diff ASTs using Z3py."""
     
-    def __init__(self, charter: Dict[str, str] = None):
+    def __init__(self, forbidden_patterns: List[re.Pattern] = None):
         self.parser = GitDiffParser()
-        self.charter = charter or {}
-        self.forbidden_patterns = get_forbidden_patterns(charter)
+        self.forbidden_patterns = forbidden_patterns or get_forbidden_patterns()
         
     def build_smt_formula(self, diff_text: str) -> str:
         """Build complete SMT-LIB2 formula from diff text."""
@@ -300,21 +309,8 @@ class SMTDiffBuilder:
         forbidden_violations = self._find_forbidden_violations(diff_ast)
         goal_violations = self._find_goal_preservation_violations(diff_ast)
         
-        # Create Z3 context
-        ctx = z3.Context()
-        solver = z3.Solver(ctx=ctx)
-        
-        # Build invariant assertions
-        forbidden_assertion = self._build_forbidden_api_assertion(forbidden_violations, ctx)
-        goal_preservation_assertion = self._build_goal_preservation_assertion(diff_ast, goal_violations, ctx)
-        
-        # Combine assertions
-        if forbidden_assertion is not None:
-            solver.add(forbidden_assertion)
-        if goal_preservation_assertion is not None:
-            solver.add(goal_preservation_assertion)
-        
-        # Check violations to determine result
+        # Fast path: if we have violations, return false immediately
+        # This is more efficient than building Z3 solver for simple cases
         if forbidden_violations or goal_violations:
             return "(assert false)"
         
@@ -326,9 +322,9 @@ class SMTDiffBuilder:
         
         for line in diff_ast.added_lines:
             for pattern in self.forbidden_patterns:
-                if re.search(pattern, line.content):
-                    violations.append((pattern, line.content, line.file_path, line.new_line_number or line.line_number))
-                    logger.warning(f"Forbidden pattern '{pattern}' found in: {line.content.strip()}")
+                if pattern.search(line.content):
+                    violations.append((pattern.pattern, line.content, line.file_path, line.new_line_number or line.line_number))
+                    logger.warning(f"Forbidden pattern '{pattern.pattern}' found in: {line.content.strip()}")
         
         return violations
     
@@ -361,8 +357,9 @@ class SMTDiffBuilder:
                 old_sig = diff_ast.function_signatures[old_sig_key]
                 new_sig = diff_ast.function_signatures[new_sig_key]
                 
-                # Check if signatures match
-                if len(old_sig.args) != len(new_sig.args):
+                # Check if signatures match - fail on any difference
+                if (len(old_sig.args) != len(new_sig.args) or 
+                    str(old_sig.args) != str(new_sig.args)):
                     violations.append((old_name, new_name, str(old_sig.args), str(new_sig.args)))
                     logger.warning(f"Function rename {old_name} -> {new_name} changes signature: {old_sig.args} != {new_sig.args}")
                 else:
@@ -393,7 +390,7 @@ class SMTDiffBuilder:
         return None
     
 # Global SMT builder instance
-_smt_builder = SMTDiffBuilder()
+_smt_builder: SMTDiffBuilder = SMTDiffBuilder()
 
 
 def unified_diff() -> str:
@@ -499,7 +496,8 @@ def analyze_diff_context(diff_text: str) -> Dict[str, any]:
 
 def extract_forbidden_from_charter(charter_clauses: Dict[str, str]) -> List[str]:
     """Extract forbidden patterns from charter clauses."""
-    return get_forbidden_patterns(charter_clauses)
+    compiled_patterns = get_forbidden_patterns(charter_clauses)
+    return [pattern.pattern for pattern in compiled_patterns]
 
 
 def build_advanced_smt(diff_text: str, forbidden_patterns: List[str]) -> str:
@@ -507,24 +505,39 @@ def build_advanced_smt(diff_text: str, forbidden_patterns: List[str]) -> str:
     if not diff_text.strip():
         return "(assert true)"
     
-    # Create a temporary charter with custom patterns
-    temp_charter = {}
-    for i, pattern in enumerate(forbidden_patterns):
-        temp_charter[f"custom_{i}"] = f"forbidden `{pattern}`"
+    # Compile custom patterns
+    compiled_patterns = [re.compile(pattern) for pattern in forbidden_patterns]
     
     # Create temporary SMT builder with custom patterns
-    temp_builder = SMTDiffBuilder(temp_charter)
+    temp_builder = SMTDiffBuilder(compiled_patterns)
     return temp_builder.build_smt_formula(diff_text)
 
 
 def build_smt_with_charter(diff_text: str, charter_clauses: Dict[str, str]) -> str:
     """Build SMT formula considering charter clauses."""
-    charter_builder = SMTDiffBuilder(charter_clauses)
+    patterns = get_forbidden_patterns(charter_clauses)
+    charter_builder = SMTDiffBuilder(patterns)
     return charter_builder.build_smt_formula(diff_text)
 
 
 def get_cached_proof(diff_hash: str) -> Optional[str]:
-    """Check Redis for cached proof result."""
-    # Redis cache wired in smt_verifier.py
-    logger.debug(f"Cache lookup for diff hash {diff_hash} - not implemented yet")
-    return None  # NOP for now
+    """Check Redis for cached proof result with fallback."""
+    try:
+        # Try to import and use Redis cache from smt_verifier
+        from agent.core.smt_verifier import get_cached_result
+        return get_cached_result(diff_hash)
+    except (ImportError, Exception) as e:
+        # Redis not available or other error - use no-op cache
+        logger.debug(f"Cache lookup for diff hash {diff_hash} failed: {e} - falling back to computation")
+        return None  # Fallback to recomputation
+
+
+def cache_proof_result(diff_hash: str, result: str) -> None:
+    """Cache proof result with fallback."""
+    try:
+        # Try to import and use Redis cache from smt_verifier
+        from agent.core.smt_verifier import cache_result
+        cache_result(diff_hash, result)
+    except (ImportError, Exception) as e:
+        # Redis not available or other error - no-op
+        logger.debug(f"Cache store for diff hash {diff_hash} failed: {e} - result not cached")
