@@ -1,0 +1,66 @@
+{
+  "id": 2,
+  "panels": [
+    {
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "displayMode": "gradient-gauge"
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "rate(raft_proof_pass_total[5m])",
+          "legendFormat": "Proofs/sec"
+        }
+      ],
+      "title": "Proof Success Rate",
+      "type": "stat"
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "raft_spectral_rho",
+          "legendFormat": "ρ"
+        }
+      ],
+      "title": "Spectral Radius",
+      "type": "timeseries"
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "raft_energy_rate_j_s",
+          "legendFormat": "J/s"
+        }
+      ],
+      "title": "Energy Rate",
+      "type": "timeseries"
+    }
+  ],
+  "title": "RAFT Metrics",
+  "uid": "0bb31899-2a49-4ebc-b398-d7794173ad80",
+  "version": 1
+}

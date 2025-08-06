@@ -3,9 +3,14 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: raft
+  - job_name: raft-metrics
     static_configs:
-      - targets: ['host.docker.internal:8002']
+      - targets: ['metrics-server:8002']
+  
+  - job_name: fuzz-test-metrics
+    static_configs:
+      - targets: ['host.docker.internal:8003']
+    scrape_interval: 2s  # More frequent scraping for real-time data
 
 rule_files:
   - /etc/prometheus/alerts.yml
