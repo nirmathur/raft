@@ -135,6 +135,137 @@ class TestSpectralRadiusEstimation:
         assert rho_15 > 0
 
 
+class TestConvergenceTolerance:
+    """Test convergence tolerance and early stopping features."""
+    
+    def test_early_convergence(self):
+        """Test that convergence tolerance enables early stopping."""
+        # Use a simple diagonal matrix that should converge quickly
+        A = torch.tensor([[0.8, 0.0], [0.0, 0.6]], dtype=torch.float32)
+        
+        def matrix_func(x):
+            return A @ x
+        
+        x = torch.tensor([1.0, 1.0], requires_grad=True)
+        
+        # Test with strict tolerance (should converge early)
+        rho_strict = estimate_spectral_radius(matrix_func, x, n_iter=100, tolerance=1e-8)
+        
+        # Test with loose tolerance
+        rho_loose = estimate_spectral_radius(matrix_func, x, n_iter=100, tolerance=1e-2)
+        
+        # Both should give reasonable results
+        assert 0.7 < rho_strict < 0.9  # Should be around 0.8
+        assert 0.7 < rho_loose < 0.9
+    
+    def test_convergence_tolerance_with_network(self):
+        """Test convergence tolerance with neural network."""
+        model = SimpleNet(in_dim=3, out_dim=3, hidden_dim=8, activation='tanh')
+        x = torch.randn(3, requires_grad=True)
+        
+        # Test with different tolerances
+        rho_strict = model.estimate_spectral_radius(x, n_iter=50, tolerance=1e-8)
+        rho_loose = model.estimate_spectral_radius(x, n_iter=50, tolerance=1e-3)
+        
+        # Both should be reasonable and not too different
+        assert isinstance(rho_strict, float)
+        assert isinstance(rho_loose, float)
+        assert rho_strict > 0
+        assert rho_loose > 0
+        assert abs(rho_strict - rho_loose) < 1.0  # Should be reasonably close
+
+
+class TestBatchSupport:
+    """Test batch support for multiple inputs."""
+    
+    def test_batch_mode_simple_function(self):
+        """Test batch mode with simple scaling function."""
+        scale_factor = 0.8
+        
+        def scale_func(x):
+            return scale_factor * x
+        
+        # Create batch of inputs
+        batch_x = torch.tensor([[1.0, 2.0], [0.5, 1.5], [2.0, 0.5]], requires_grad=True)
+        
+        # Test batch mode
+        rho_batch = estimate_spectral_radius(scale_func, batch_x, batch_mode=True, n_iter=10)
+        
+        # Should be close to the scale factor
+        assert abs(rho_batch - abs(scale_factor)) < 0.1
+    
+    def test_batch_mode_with_network(self):
+        """Test batch mode with neural network."""
+        model = SimpleNet(in_dim=4, out_dim=4, hidden_dim=8, activation='tanh')
+        
+        # Create batch of inputs
+        batch_x = torch.randn(5, 4, requires_grad=True)  # Batch of 5 vectors
+        
+        # Test batch mode
+        rho_batch = model.estimate_spectral_radius(batch_x, batch_mode=True, n_iter=8)
+        
+        # Test individual mode for comparison
+        individual_rhos = []
+        for i in range(5):
+            rho_i = model.estimate_spectral_radius(batch_x[i], n_iter=8)
+            individual_rhos.append(rho_i)
+        
+        expected_avg = sum(individual_rhos) / len(individual_rhos)
+        
+        # Batch result should be close to average of individual results
+        # Allow for reasonable variation due to random initialization
+        assert abs(rho_batch - expected_avg) < 0.5
+    
+    def test_auto_batch_detection(self):
+        """Test automatic batch detection."""
+        model = SimpleNet(in_dim=3, out_dim=3, hidden_dim=6)
+        
+        # 2D input should automatically trigger batch mode
+        batch_x = torch.randn(4, 3, requires_grad=True)
+        
+        # Should automatically handle as batch (batch_mode=False but x.dim() > 1)
+        rho_auto = model.estimate_spectral_radius(batch_x, n_iter=6)
+        
+        # Should return a reasonable value
+        assert isinstance(rho_auto, float)
+        assert rho_auto > 0
+        assert not np.isnan(rho_auto)
+
+
+class TestDeviceAwareness:
+    """Test device awareness and GPU compatibility."""
+    
+    def test_cpu_device_handling(self):
+        """Test that device handling works correctly on CPU."""
+        model = SimpleNet(in_dim=3, out_dim=3, hidden_dim=8)
+        x = torch.randn(3, requires_grad=True)
+        
+        # Ensure everything is on CPU
+        model = model.to('cpu')
+        x = x.to('cpu')
+        
+        rho = model.estimate_spectral_radius(x, n_iter=6)
+        
+        assert isinstance(rho, float)
+        assert rho > 0
+        assert not np.isnan(rho)
+    
+    def test_device_consistency(self):
+        """Test that device consistency is maintained."""
+        model = SimpleNet(in_dim=4, out_dim=4, hidden_dim=8)
+        
+        # Test CPU
+        x_cpu = torch.randn(4, requires_grad=True, device='cpu')
+        model_cpu = model.to('cpu')
+        rho_cpu = model_cpu.estimate_spectral_radius(x_cpu, n_iter=6)
+        
+        assert isinstance(rho_cpu, float)
+        assert rho_cpu > 0
+        
+        # Note: GPU test would require CUDA availability
+        # This test structure allows for easy GPU testing when available
+
+
 class TestSimpleNetSpectralRadius:
     """Test spectral radius estimation on SimpleNet models."""
     
@@ -143,7 +274,7 @@ class TestSimpleNetSpectralRadius:
         model = SimpleNet(in_dim=3, out_dim=3, hidden_dim=8)
         x = torch.randn(3, requires_grad=True)
         
-        rho = estimate_spectral_radius(model, x, n_iter=10)
+        rho = model.estimate_spectral_radius(x, n_iter=10)
         
         # Should return a valid positive number
         assert isinstance(rho, float)
@@ -162,7 +293,7 @@ class TestSimpleNetSpectralRadius:
             model = SimpleNet(in_dim=in_dim, out_dim=out_dim, hidden_dim=hidden_dim)
             x = torch.randn(in_dim, requires_grad=True)
             
-            rho = estimate_spectral_radius(model, x, n_iter=8)
+            rho = model.estimate_spectral_radius(x, n_iter=8)
             
             # Should always return a valid positive spectral radius
             assert isinstance(rho, float)
@@ -178,7 +309,7 @@ class TestSimpleNetSpectralRadius:
             model = SimpleNet(in_dim=4, out_dim=4, hidden_dim=8, activation=activation)
             x = torch.randn(4, requires_grad=True)
             
-            rho = estimate_spectral_radius(model, x, n_iter=10)
+            rho = model.estimate_spectral_radius(x, n_iter=10)
             
             # Should work with all activation functions
             assert isinstance(rho, float)
@@ -205,7 +336,7 @@ class TestSimpleNetSpectralRadius:
         model = SimpleNet(in_dim=3, out_dim=5, hidden_dim=8)
         x = torch.randn(3, requires_grad=True)
         
-        rho = estimate_spectral_radius(model, x, n_iter=10)
+        rho = model.estimate_spectral_radius(x, n_iter=10)
         
         # Should handle rectangular Jacobians (using J^T @ J)
         assert isinstance(rho, float)
@@ -238,3 +369,30 @@ class TestEdgeCases:
         # Should handle 1D case
         assert isinstance(rho, float)
         assert rho > 0
+    
+    def test_invalid_batch_dimensions(self):
+        """Test error handling for invalid batch dimensions."""
+        model = SimpleNet(in_dim=3, out_dim=3, hidden_dim=6)
+        
+        # 3D tensor should raise an error in single mode
+        x_3d = torch.randn(2, 3, 4, requires_grad=True)
+        
+        with pytest.raises(ValueError):
+            model._estimate_single_spectral_radius(x_3d, n_iter=5, tolerance=1e-6)
+    
+    def test_convergence_tolerance_bounds(self):
+        """Test convergence tolerance boundary conditions."""
+        model = SimpleNet(in_dim=2, out_dim=2, hidden_dim=4)
+        x = torch.randn(2, requires_grad=True)
+        
+        # Very strict tolerance
+        rho_strict = model.estimate_spectral_radius(x, n_iter=100, tolerance=1e-12)
+        
+        # Very loose tolerance
+        rho_loose = model.estimate_spectral_radius(x, n_iter=100, tolerance=1.0)
+        
+        # Both should return valid results
+        assert isinstance(rho_strict, float)
+        assert isinstance(rho_loose, float)
+        assert rho_strict > 0
+        assert rho_loose > 0
