@@ -55,6 +55,8 @@ RAFT includes a sophisticated SMT-LIB2 based Git diff analyzer that uses Z3py to
 1. **No forbidden API calls** - Detects dangerous operations like `exec()`, `subprocess`, `eval()`, etc.
 2. **Goal preservation** - Ensures function renames preserve their signatures
 
+**Charter clauses (`x^x-22`, `x^x-23`, …) are injected at build time; see `get_forbidden_patterns()`.**
+
 ### Core Components
 
 #### Diff Builder API
@@ -161,17 +163,23 @@ result = build_advanced_smt(diff_text, custom_patterns)
 
 ### Charter-based Configuration
 
-Integrate with RAFT's charter system for dynamic pattern configuration:
+Integrate with RAFT's charter system for dynamic pattern configuration. Charter clauses are now automatically merged with default forbidden patterns:
 
 ```python
-from agent.core.diff_builder import build_smt_with_charter
+from agent.core.diff_builder import build_smt_with_charter, get_forbidden_patterns
 
 charter_clauses = {
     "x^x-22": "No dangerous imports",
-    "x^x-23": "Preserve function signatures"
+    "x^x-23": "Preserve function signatures", 
+    "x^x-99": "forbidden `pickle` - No pickle imports allowed"
 }
 
+# Charter patterns are automatically merged at build time
 result = build_smt_with_charter(diff_text, charter_clauses)
+
+# Or get the merged pattern list directly
+patterns = get_forbidden_patterns(charter_clauses)
+print(f"Total patterns: {len(patterns)}")  # Includes defaults + charter patterns
 ```
 
 ## Benchmarking

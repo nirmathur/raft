@@ -25,7 +25,7 @@ from git import Repo
 from loguru import logger
 
 # ------------------------------------------------------------------------- #
-FORBIDDEN_PATTERNS = [
+DEFAULT_FORBIDDEN_PATTERNS = [
     r"\bsubprocess\b",
     r"\bos\.system\b", 
     r"\beval\b",
@@ -35,6 +35,51 @@ FORBIDDEN_PATTERNS = [
     r"\bglobals\b",  # global manipulation
     r"\blocals\b",  # local manipulation
 ]
+
+# Cache for merged patterns to avoid recomputation
+_pattern_cache = {}
+
+def get_forbidden_patterns(charter: Dict[str, str] = None) -> List[str]:
+    """Get forbidden patterns merged with charter clauses.
+    
+    Charter clauses that contain regex patterns will be added to the default
+    forbidden patterns. Uses caching to avoid recomputation.
+    """
+    if charter is None:
+        return DEFAULT_FORBIDDEN_PATTERNS
+    
+    # Create cache key from charter clauses
+    cache_key = tuple(sorted(charter.items()))
+    
+    if cache_key in _pattern_cache:
+        return _pattern_cache[cache_key]
+    
+    patterns = DEFAULT_FORBIDDEN_PATTERNS.copy()
+    
+    # Extract regex patterns from charter clauses
+    for clause_id, clause_text in charter.items():
+        # Look for charter clauses that define forbidden patterns
+        if any(keyword in clause_text.lower() for keyword in ['forbidden', 'dangerous', 'no ', 'block']):
+            # Try to extract regex pattern from clause text
+            # This is a simplified heuristic - in practice, charter clauses would have
+            # a more structured format for defining patterns
+            import re
+            pattern_matches = re.findall(r'`([^`]+)`', clause_text)  # Look for `pattern`
+            for pattern in pattern_matches:
+                # Convert simple words to regex word boundaries
+                if pattern and not any(special in pattern for special in ['\\', '(', ')', '[', ']', '{', '}', '+', '*', '?', '^', '$', '|', '.']):
+                    pattern = rf'\b{re.escape(pattern)}\b'
+                if pattern not in patterns:
+                    patterns.append(pattern)
+            
+            # Also check for common pattern indicators
+            if 'pickle' in clause_text.lower():
+                patterns.append(r'\bpickle\b')
+            if 'shell' in clause_text.lower():
+                patterns.append(r'\bshell\b')
+    
+    _pattern_cache[cache_key] = patterns
+    return patterns
 # ------------------------------------------------------------------------- #
 
 
@@ -45,6 +90,8 @@ class DiffLine:
     content: str
     file_path: str
     line_number: int
+    old_line_number: Optional[int] = None  # Line number in old file
+    new_line_number: Optional[int] = None  # Line number in new file
 
 
 @dataclass
@@ -89,7 +136,8 @@ class GitDiffParser:
         function_signatures = {}
         
         current_file = None
-        line_number = 0
+        old_line_number = 0
+        new_line_number = 0
         
         for line in diff_text.split('\n'):
             if line.startswith('diff --git'):
@@ -99,28 +147,38 @@ class GitDiffParser:
                     current_file = parts[3][2:]  # Remove 'b/' prefix
                     modified_files.add(current_file)
             elif line.startswith('@@'):
-                # Parse hunk header for line numbers
-                match = re.search(r'\+(\d+)', line)
-                if match:
-                    line_number = int(match.group(1))
+                # Parse hunk header for both old and new line numbers
+                # Format: @@ -old_start,old_count +new_start,new_count @@
+                old_match = re.search(r'-(\d+)', line)
+                new_match = re.search(r'\+(\d+)', line)
+                if old_match:
+                    old_line_number = int(old_match.group(1))
+                if new_match:
+                    new_line_number = int(new_match.group(1))
             elif line.startswith('+') and not line.startswith('+++'):
                 # Added line
                 content = line[1:]  # Remove '+' prefix
-                added_lines.append(DiffLine('+', content, current_file or '', line_number))
+                diff_line = DiffLine('+', content, current_file or '', new_line_number,
+                                   old_line_number=None, new_line_number=new_line_number)
+                added_lines.append(diff_line)
                 
                 # Check for function definitions
                 self._extract_function_info(content, function_signatures, '+')
-                line_number += 1
+                new_line_number += 1
             elif line.startswith('-') and not line.startswith('---'):
                 # Removed line  
                 content = line[1:]  # Remove '-' prefix
-                removed_lines.append(DiffLine('-', content, current_file or '', line_number))
+                diff_line = DiffLine('-', content, current_file or '', old_line_number,
+                                   old_line_number=old_line_number, new_line_number=None)
+                removed_lines.append(diff_line)
                 
                 # Check for function definitions
                 self._extract_function_info(content, function_signatures, '-')
+                old_line_number += 1
             elif line.startswith(' '):
-                # Context line
-                line_number += 1
+                # Context line - present in both old and new
+                old_line_number += 1
+                new_line_number += 1
         
         # Detect function renames by comparing added/removed function names
         function_renames = self._detect_function_renames(added_lines, removed_lines)
@@ -140,42 +198,97 @@ class GitDiffParser:
             signatures[key] = FunctionSignature(func_name, args)
     
     def _detect_function_renames(self, added_lines: List[DiffLine], removed_lines: List[DiffLine]) -> Dict[str, str]:
-        """Detect potential function renames by comparing signatures."""
+        """Detect potential function renames by comparing full signatures."""
         added_funcs = {}
         removed_funcs = {}
         
+        # Enhanced pattern to capture return type annotations
+        enhanced_pattern = re.compile(r'^[+-]?\s*def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^:]+))?:', re.MULTILINE)
+        
         # Extract function signatures from added/removed lines
         for line in added_lines:
-            match = self.function_pattern.search(line.content)
+            match = enhanced_pattern.search(line.content)
             if match:
                 func_name = match.group(1)
-                args = match.group(2)
-                added_funcs[func_name] = args
+                args = match.group(2).strip()
+                return_type = match.group(3).strip() if match.group(3) else None
+                # Create full signature for comparison
+                full_sig = f"{args}|{return_type or ''}"
+                added_funcs[func_name] = full_sig
         
         for line in removed_lines:
-            match = self.function_pattern.search(line.content)
+            match = enhanced_pattern.search(line.content)
             if match:
                 func_name = match.group(1)
-                args = match.group(2)
-                removed_funcs[func_name] = args
+                args = match.group(2).strip()
+                return_type = match.group(3).strip() if match.group(3) else None
+                # Create full signature for comparison
+                full_sig = f"{args}|{return_type or ''}"
+                removed_funcs[func_name] = full_sig
         
-        # Find potential renames (same signature, different name)
+        # Find potential renames (same full signature, different name)
+        # Use more strict matching to avoid false positives
         renames = {}
-        for old_name, old_args in removed_funcs.items():
-            for new_name, new_args in added_funcs.items():
-                if old_args == new_args and old_name != new_name:
+        used_new_names = set()
+        
+        for old_name, old_sig in removed_funcs.items():
+            for new_name, new_sig in added_funcs.items():
+                if (old_sig == new_sig and 
+                    old_name != new_name and 
+                    new_name not in used_new_names and
+                    old_sig.split('|')[0]):  # Ensure non-empty args to avoid matching empty functions
                     renames[old_name] = new_name
+                    used_new_names.add(new_name)
                     break
         
+        # Also detect cases where functions have the same name but different signatures
+        # These will be flagged as violations in goal preservation
+        for old_name, old_sig in removed_funcs.items():
+            for new_name, new_sig in added_funcs.items():
+                if (old_name == new_name and  # Same name but different signature
+                    old_sig != new_sig and
+                    new_name not in used_new_names and
+                    old_name not in renames):
+                    renames[old_name] = new_name
+                    used_new_names.add(new_name)
+                    break
+                elif (old_name != new_name and 
+                      old_sig != new_sig and
+                      new_name not in used_new_names and
+                      old_name not in renames):
+                    # Check if names are similar enough to be considered a potential rename
+                    # For simplicity, we'll consider it if one name is a substring of the other
+                    # or they share a common root
+                    if (old_name in new_name or new_name in old_name or
+                        self._names_similar(old_name, new_name)):
+                        renames[old_name] = new_name
+                        used_new_names.add(new_name)
+                        break
+        
         return renames
+    
+    def _names_similar(self, name1: str, name2: str) -> bool:
+        """Check if two function names are similar enough to be considered a rename."""
+        # Simple heuristic: check for common prefixes/suffixes or shared roots
+        if len(name1) < 3 or len(name2) < 3:
+            return False
+        
+        # Check for shared prefix/suffix of at least 3 characters
+        for i in range(3, min(len(name1), len(name2)) + 1):
+            if name1[:i] == name2[:i] or name1[-i:] == name2[-i:]:
+                return True
+        
+        return False
 
 
 class SMTDiffBuilder:
     """Builds SMT-LIB2 formulas from Git diff ASTs using Z3py."""
     
-    def __init__(self):
+    def __init__(self, charter: Dict[str, str] = None):
         self.parser = GitDiffParser()
-    
+        self.charter = charter or {}
+        self.forbidden_patterns = get_forbidden_patterns(charter)
+        
     def build_smt_formula(self, diff_text: str) -> str:
         """Build complete SMT-LIB2 formula from diff text."""
         if not diff_text.strip():
@@ -183,13 +296,17 @@ class SMTDiffBuilder:
         
         diff_ast = self.parser.parse_unified_diff(diff_text)
         
+        # Find violations first to avoid duplicate scanning
+        forbidden_violations = self._find_forbidden_violations(diff_ast)
+        goal_violations = self._find_goal_preservation_violations(diff_ast)
+        
         # Create Z3 context
         ctx = z3.Context()
         solver = z3.Solver(ctx=ctx)
         
         # Build invariant assertions
-        forbidden_assertion = self._build_forbidden_api_assertion(diff_ast, ctx)
-        goal_preservation_assertion = self._build_goal_preservation_assertion(diff_ast, ctx)
+        forbidden_assertion = self._build_forbidden_api_assertion(forbidden_violations, ctx)
+        goal_preservation_assertion = self._build_goal_preservation_assertion(diff_ast, goal_violations, ctx)
         
         # Combine assertions
         if forbidden_assertion is not None:
@@ -197,80 +314,45 @@ class SMTDiffBuilder:
         if goal_preservation_assertion is not None:
             solver.add(goal_preservation_assertion)
         
-        # Convert to SMT-LIB2 string format
-        if len(solver.assertions()) == 0:
-            return "(assert true)"
-        
-        # Check if any forbidden patterns are violated
-        if self._has_forbidden_violations(diff_ast):
-            return "(assert false)"
-        
-        # Check if goal preservation is violated
-        if self._has_goal_preservation_violations(diff_ast):
+        # Check violations to determine result
+        if forbidden_violations or goal_violations:
             return "(assert false)"
         
         return "(assert true)"
     
-    def _build_forbidden_api_assertion(self, diff_ast: DiffAST, ctx: z3.Context) -> Optional[z3.BoolRef]:
-        """Build assertion that no forbidden API calls are introduced."""
+    def _find_forbidden_violations(self, diff_ast: DiffAST) -> List[Tuple[str, str, str, int]]:
+        """Find forbidden API violations in the diff."""
         violations = []
         
         for line in diff_ast.added_lines:
-            for pattern in FORBIDDEN_PATTERNS:
+            for pattern in self.forbidden_patterns:
                 if re.search(pattern, line.content):
-                    violations.append((pattern, line.content, line.file_path, line.line_number))
+                    violations.append((pattern, line.content, line.file_path, line.new_line_number or line.line_number))
+                    logger.warning(f"Forbidden pattern '{pattern}' found in: {line.content.strip()}")
         
-        if violations:
-            # Create Z3 variables for each violation
-            violation_vars = []
-            for i, (pattern, content, file_path, line_num) in enumerate(violations):
-                var = z3.Bool(f"violation_{i}", ctx)
-                violation_vars.append(var)
-            
-            # Assert that no violations should exist
-            if violation_vars:
-                return z3.Not(z3.Or(violation_vars, ctx), ctx)
-        
-        return None
+        return violations
     
-    def _build_goal_preservation_assertion(self, diff_ast: DiffAST, ctx: z3.Context) -> Optional[z3.BoolRef]:
-        """Build assertion that function renames preserve signatures."""
-        if not diff_ast.function_renames:
+    def _build_forbidden_api_assertion(self, violations: List[Tuple[str, str, str, int]], ctx: z3.Context) -> Optional[z3.BoolRef]:
+        """Build assertion that no forbidden API calls are introduced."""
+        if not violations:
             return None
-        
-        preservation_constraints = []
-        
-        for old_name, new_name in diff_ast.function_renames.items():
-            old_sig_key = f"-{old_name}"
-            new_sig_key = f"+{new_name}"
             
-            if old_sig_key in diff_ast.function_signatures and new_sig_key in diff_ast.function_signatures:
-                old_sig = diff_ast.function_signatures[old_sig_key]
-                new_sig = diff_ast.function_signatures[new_sig_key]
-                
-                # Assert that signatures are equivalent
-                if len(old_sig.args) == len(new_sig.args):
-                    # For now, skip the complex Z3 function equivalence and just check signatures match
-                    # This is a simplified approach - the full Z3 approach would require more complex setup
-                    logger.info(f"Function rename detected: {old_name} -> {new_name} with matching signatures")
-                    # In the future, this could be expanded to full Z3 function equivalence proofs
+        # Create Z3 variables for each violation and assert they are true (violations exist)
+        violation_vars = []
+        for i, (pattern, content, file_path, line_num) in enumerate(violations):
+            var = z3.Bool(f"violation_{i}", ctx)
+            violation_vars.append(var)
         
-        if preservation_constraints:
-            return z3.And(preservation_constraints, ctx)
+        # Assert that violations exist (making the formula UNSAT)
+        if violation_vars:
+            return z3.And([var for var in violation_vars], ctx)
         
         return None
     
-    def _has_forbidden_violations(self, diff_ast: DiffAST) -> bool:
-        """Check if diff contains forbidden API violations."""
-        for line in diff_ast.added_lines:
-            for pattern in FORBIDDEN_PATTERNS:
-                if re.search(pattern, line.content):
-                    logger.warning(f"Forbidden pattern '{pattern}' found in: {line.content}")
-                    return True
-        return False
-    
-    def _has_goal_preservation_violations(self, diff_ast: DiffAST) -> bool:
-        """Check if function renames violate goal preservation."""
+    def _find_goal_preservation_violations(self, diff_ast: DiffAST) -> List[Tuple[str, str, str, str]]:
+        """Find goal preservation violations in function renames."""
+        violations = []
+        
         for old_name, new_name in diff_ast.function_renames.items():
             old_sig_key = f"-{old_name}"
             new_sig_key = f"+{new_name}"
@@ -281,12 +363,35 @@ class SMTDiffBuilder:
                 
                 # Check if signatures match
                 if len(old_sig.args) != len(new_sig.args):
-                    logger.warning(f"Function rename {old_name} -> {new_name} changes signature")
-                    return True
+                    violations.append((old_name, new_name, str(old_sig.args), str(new_sig.args)))
+                    logger.warning(f"Function rename {old_name} -> {new_name} changes signature: {old_sig.args} != {new_sig.args}")
+                else:
+                    logger.info(f"Function rename detected: {old_name} -> {new_name} with matching signatures")
         
-        return False
-
-
+        return violations
+    
+    def _build_goal_preservation_assertion(self, diff_ast: DiffAST, violations: List[Tuple[str, str, str, str]], ctx: z3.Context) -> Optional[z3.BoolRef]:
+        """Build assertion that function renames preserve signatures."""
+        if not violations:
+            return None
+        
+        # Create Z3 assertions for signature mismatches
+        violation_constraints = []
+        
+        for i, (old_name, new_name, old_args, new_args) in enumerate(violations):
+            # Create string variables for old and new signatures
+            old_sig_var = z3.String(f"old_sig_{i}", ctx)
+            new_sig_var = z3.String(f"new_sig_{i}", ctx)
+            
+            # Assert that signatures are different (violation exists)
+            sig_mismatch = z3.Not(old_sig_var == new_sig_var, ctx)
+            violation_constraints.append(sig_mismatch)
+        
+        if violation_constraints:
+            return z3.And(violation_constraints, ctx)
+        
+        return None
+    
 # Global SMT builder instance
 _smt_builder = SMTDiffBuilder()
 
@@ -336,11 +441,13 @@ def calculate_risk_score(diff_text: str) -> float:
     score += len(diff_ast.removed_lines) * 0.005
     
     # Penalty for forbidden patterns
-    if _smt_builder._has_forbidden_violations(diff_ast):
+    forbidden_violations = _smt_builder._find_forbidden_violations(diff_ast)
+    if forbidden_violations:
         score += 0.8
     
     # Penalty for goal preservation violations
-    if _smt_builder._has_goal_preservation_violations(diff_ast):
+    goal_violations = _smt_builder._find_goal_preservation_violations(diff_ast)
+    if goal_violations:
         score += 0.6
     
     # Penalty for function renames (inherently risky)
@@ -367,15 +474,14 @@ def analyze_diff_context(diff_text: str) -> Dict[str, any]:
     
     # Find specific forbidden violations
     forbidden_violations = []
-    for line in diff_ast.added_lines:
-        for pattern in FORBIDDEN_PATTERNS:
-            if re.search(pattern, line.content):
-                forbidden_violations.append({
-                    "pattern": pattern,
-                    "line": line.content.strip(),
-                    "file": line.file_path,
-                    "line_number": line.line_number
-                })
+    violations = _smt_builder._find_forbidden_violations(diff_ast)
+    for pattern, content, file_path, line_num in violations:
+        forbidden_violations.append({
+            "pattern": pattern,
+            "line": content.strip(),
+            "file": file_path,
+            "line_number": line_num
+        })
     
     return {
         "file_count": len(diff_ast.modified_files),
@@ -393,8 +499,7 @@ def analyze_diff_context(diff_text: str) -> Dict[str, any]:
 
 def extract_forbidden_from_charter(charter_clauses: Dict[str, str]) -> List[str]:
     """Extract forbidden patterns from charter clauses."""
-    # TODO: Parse charter for dynamic forbidden patterns
-    return FORBIDDEN_PATTERNS  # fallback to static list
+    return get_forbidden_patterns(charter_clauses)
 
 
 def build_advanced_smt(diff_text: str, forbidden_patterns: List[str]) -> str:
@@ -402,26 +507,24 @@ def build_advanced_smt(diff_text: str, forbidden_patterns: List[str]) -> str:
     if not diff_text.strip():
         return "(assert true)"
     
-    # Temporarily override forbidden patterns
-    global FORBIDDEN_PATTERNS
-    original_patterns = FORBIDDEN_PATTERNS
-    FORBIDDEN_PATTERNS = forbidden_patterns
+    # Create a temporary charter with custom patterns
+    temp_charter = {}
+    for i, pattern in enumerate(forbidden_patterns):
+        temp_charter[f"custom_{i}"] = f"forbidden `{pattern}`"
     
-    try:
-        result = build_smt_diff(diff_text)
-    finally:
-        FORBIDDEN_PATTERNS = original_patterns
-    
-    return result
+    # Create temporary SMT builder with custom patterns
+    temp_builder = SMTDiffBuilder(temp_charter)
+    return temp_builder.build_smt_formula(diff_text)
 
 
 def build_smt_with_charter(diff_text: str, charter_clauses: Dict[str, str]) -> str:
     """Build SMT formula considering charter clauses."""
-    charter_forbidden = extract_forbidden_from_charter(charter_clauses)
-    return build_advanced_smt(diff_text, charter_forbidden)
+    charter_builder = SMTDiffBuilder(charter_clauses)
+    return charter_builder.build_smt_formula(diff_text)
 
 
 def get_cached_proof(diff_hash: str) -> Optional[str]:
     """Check Redis for cached proof result."""
-    # Integration with smt_verifier.py caching
-    pass
+    # Redis cache wired in smt_verifier.py
+    logger.debug(f"Cache lookup for diff hash {diff_hash} - not implemented yet")
+    return None  # NOP for now

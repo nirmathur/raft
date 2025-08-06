@@ -7,7 +7,7 @@ from agent.core.diff_builder import (
     analyze_diff_context, build_advanced_smt, build_smt_diff, 
     calculate_risk_score, extract_forbidden_from_charter,
     parse_diff_to_ast, DiffAST, DiffLine, FunctionSignature,
-    GitDiffParser, SMTDiffBuilder
+    GitDiffParser, SMTDiffBuilder, build_smt_with_charter
 )
 
 
@@ -367,3 +367,125 @@ def test_analyze_diff_context():
     assert "has_deletions" in context
     assert "risk_score" in context
     assert context["file_count"] == 1
+
+
+def test_forbidden_charter_injection():
+    """Test that charter clause adds pattern and diff becomes UNSAFE."""
+    charter_clauses = {
+        'x^x-99': 'forbidden `pickle` - No pickle imports allowed'
+    }
+    diff_text = """diff --git a/test.py b/test.py
+@@ -1,2 +1,3 @@
+ def test():
++    import pickle
+     pass
+"""
+    result = build_smt_with_charter(diff_text, charter_clauses)
+    assert result == "(assert false)"
+
+
+def test_function_rename_signature_mismatch():
+    """Test that function signature mismatch results in SMT false."""
+    diff_text = """diff --git a/test.py b/test.py
+@@ -1,2 +1,2 @@
+-def calculate_sum(a, b):
++def calculate_sum(a):
+     return a
+"""
+    result = build_smt_diff(diff_text)
+    # Should detect signature mismatch and return false
+    assert result == "(assert false)"
+
+
+def test_location_metadata_preserved():
+    """Test that added lines keep correct new_lineno."""
+    diff_text = """diff --git a/test.py b/test.py
+@@ -5,4 +5,5 @@
+ def existing():
+     pass
++    print("new line")
+     return True
+"""
+    ast = parse_diff_to_ast(diff_text)
+    
+    assert len(ast.added_lines) == 1
+    added_line = ast.added_lines[0]
+    assert added_line.new_line_number == 7  # Line 5 + 2 lines down
+    assert added_line.old_line_number is None  # Added line has no old line number
+    assert 'print("new line")' in added_line.content
+
+
+def test_charter_pattern_merging():
+    """Test that charter patterns are properly merged with defaults."""
+    from agent.core.diff_builder import get_forbidden_patterns, DEFAULT_FORBIDDEN_PATTERNS
+    
+    charter_clauses = {
+        'x^x-98': 'forbidden `custom_dangerous` - Custom dangerous pattern',
+        'x^x-99': 'No pickle allowed'  # Should add pickle pattern
+    }
+    
+    patterns = get_forbidden_patterns(charter_clauses)
+    
+    # Should include all default patterns
+    for default_pattern in DEFAULT_FORBIDDEN_PATTERNS:
+        assert default_pattern in patterns
+    
+    # Should include charter-derived patterns
+    assert r'\bcustom_dangerous\b' in patterns
+    assert r'\bpickle\b' in patterns
+    
+    # Should be more than just defaults
+    assert len(patterns) > len(DEFAULT_FORBIDDEN_PATTERNS)
+
+
+def test_enhanced_function_rename_detection():
+    """Test enhanced function rename detection with return types."""
+    diff_text = """diff --git a/test.py b/test.py
+@@ -1,4 +1,4 @@
+-def calculate_sum(a: int, b: int) -> int:
++def compute_sum(a: int, b: int) -> int:
+     return a + b
+"""
+    
+    ast = parse_diff_to_ast(diff_text)
+    
+    # Should detect rename with matching full signatures
+    assert "calculate_sum" in ast.function_renames
+    assert ast.function_renames["calculate_sum"] == "compute_sum"
+
+
+def test_line_number_tracking():
+    """Test that old and new line numbers are correctly tracked."""
+    diff_text = """diff --git a/test.py b/test.py
+@@ -10,6 +10,7 @@
+ def func():
+     x = 1
+-    y = 2
++    y = 3
++    z = 4
+     return x + y
+"""
+    
+    ast = parse_diff_to_ast(diff_text)
+    
+    # Check removed line
+    assert len(ast.removed_lines) == 1
+    removed_line = ast.removed_lines[0]
+    assert removed_line.old_line_number == 12  # Line 10 + 2 down
+    assert removed_line.new_line_number is None
+    assert "y = 2" in removed_line.content
+    
+    # Check added lines
+    assert len(ast.added_lines) == 2
+    
+    # First added line (y = 3)
+    added_line1 = ast.added_lines[0]
+    assert added_line1.new_line_number == 12
+    assert added_line1.old_line_number is None
+    assert "y = 3" in added_line1.content
+    
+    # Second added line (z = 4)
+    added_line2 = ast.added_lines[1]
+    assert added_line2.new_line_number == 13
+    assert added_line2.old_line_number is None
+    assert "z = 4" in added_line2.content
