@@ -38,6 +38,8 @@ class BenchmarkResult:
     smt_build_time: float
     smt_result: str
     risk_score: float
+    added_lines: int = 0
+    removed_lines: int = 0
     memory_usage_mb: float = 0.0
 
 
@@ -95,6 +97,7 @@ class DiffGenerator:
             lines_per_file = line_count // file_count
             if file_idx == 0:
                 lines_per_file += line_count % file_count  # Add remainder to first file
+            lines_per_file = max(1, lines_per_file)  # Ensure every file has at least one line
             
             diff_parts.append(f"@@ -1,2 +1,{lines_per_file + 2} @@")
             diff_parts.append(" def existing_function():")
@@ -123,6 +126,7 @@ class DiffGenerator:
             lines_per_file = line_count // file_count
             if file_idx == 0:
                 lines_per_file += line_count % file_count
+            lines_per_file = max(1, lines_per_file)  # Ensure every file has at least one line
             
             diff_parts.append(f"@@ -1,2 +1,{lines_per_file + 2} @@")
             diff_parts.append(" def existing_function():")
@@ -173,7 +177,10 @@ class SMTBenchmarker:
             print(f"[BENCHMARK] {message}")
     
     def measure_memory_usage(self) -> float:
-        """Measure current memory usage in MB."""
+        """Measure current memory usage in MB.
+        
+        If psutil missing, memory usage reported as 0.
+        """
         try:
             import psutil
             process = psutil.Process()
@@ -187,6 +194,10 @@ class SMTBenchmarker:
         
         # Parse diff to get statistics
         ast = parse_diff_to_ast(diff_text)
+        
+        # Get line counts for accurate metrics
+        added = len(ast.added_lines)
+        removed = len(ast.removed_lines)
         
         # Measure memory before
         memory_before = self.measure_memory_usage()
@@ -205,15 +216,21 @@ class SMTBenchmarker:
         # Get additional context
         context = analyze_diff_context(diff_text)
         
+        # Import SMT builder to check goal preservation violations
+        from agent.core.diff_builder import _smt_builder
+        has_goal_violations = bool(_smt_builder._find_goal_preservation_violations(ast))
+        
         result = BenchmarkResult(
             diff_size=len(diff_text),
             line_count=len(ast.added_lines) + len(ast.removed_lines),
             file_count=len(ast.modified_files),
             has_forbidden=len(context["forbidden_violations"]) > 0,
-            has_function_renames=len(ast.function_renames) > 0,
+            has_function_renames=has_goal_violations,
             smt_build_time=build_time,
             smt_result=smt_result,
             risk_score=context["risk_score"],
+            added_lines=added,
+            removed_lines=removed,
             memory_usage_mb=memory_usage
         )
         

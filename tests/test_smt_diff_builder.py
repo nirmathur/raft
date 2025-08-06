@@ -1,7 +1,4 @@
 import pytest
-import tempfile
-import os
-from unittest.mock import patch, Mock
 
 from agent.core.diff_builder import (
     analyze_diff_context, build_advanced_smt, build_smt_diff, 
@@ -137,18 +134,15 @@ class TestSMTDiffBuilder:
     
     def test_function_rename_with_different_signature_is_unsafe(self):
         """Test that function rename with different signature is considered unsafe."""
-        # This is a more complex case that would need sophisticated analysis
-        # For now, we test the basic structure
         rename_diff = """diff --git a/test.py b/test.py
 @@ -1,2 +1,2 @@
 -def old_name(x):
 +def new_name(x, y):
      return x
 """
-        # The current implementation may not catch this, but the infrastructure is there
         result = build_smt_diff(rename_diff)
-        # This should eventually be "(assert false)" when signature checking is fully implemented
-        assert result in ["(assert true)", "(assert false)"]
+        # Now properly detects signature mismatches
+        assert result == "(assert false)"
     
     def test_empty_diff_returns_assert_true(self):
         """Test that empty diff returns (assert true)."""
@@ -239,7 +233,7 @@ class TestDiffAnalysis:
         dangerous_score = calculate_risk_score(dangerous_diff)
         
         assert safe_score < medium_score < dangerous_score
-        assert dangerous_score > 0.8
+        assert dangerous_score > 0.9  # When forbidden patterns exist, risk should be ≥ 0.9
     
     def test_parse_diff_to_ast_external_api(self):
         """Test the external parse_diff_to_ast API function."""
@@ -356,7 +350,7 @@ def test_risk_score_calculation():
     # Diff with dangerous patterns should have higher risk
     dangerous_diff = "diff --git a/file.py b/file.py\n+ exec('code')"
     score = calculate_risk_score(dangerous_diff)
-    assert score > 0.8  # Should be high risk due to exec
+    assert score > 0.9  # Should be high risk due to exec
 
 
 def test_analyze_diff_context():
@@ -489,3 +483,42 @@ def test_line_number_tracking():
     assert added_line2.new_line_number == 13
     assert added_line2.old_line_number is None
     assert "z = 4" in added_line2.content
+
+
+def test_signature_mismatch_returns_false():
+    """Test that signature mismatch results in SMT false."""
+    diff = """diff --git a/test.py b/test.py
+@@ -1,2 +1,2 @@
+-def calculate_sum(a):
++def calculate_sum(a, b):
+     pass
+"""
+    assert build_smt_diff(diff) == "(assert false)"
+
+
+def test_line_number_metadata():
+    """Test that line number metadata is preserved correctly."""
+    diff = """diff --git a/x.py b/x.py
+@@ -10,1 +10,1 @@
++danger = 1
+"""
+    ast = parse_diff_to_ast(diff)
+    assert len(ast.added_lines) == 1
+    assert ast.added_lines[0].line_number == 10
+    assert ast.added_lines[0].new_line_number == 10
+
+
+@pytest.mark.parametrize("pattern", [r"\bexec\b", r"\bsubprocess\b"])
+def test_forbidden_patterns(pattern):
+    """Test parametrized forbidden patterns detection."""
+    # Extract the pattern name for generating test code
+    pattern_name = pattern.replace(r'\b', '').replace('\\', '')
+    if pattern_name == "exec":
+        diff = f"+ exec('dangerous code')"
+    elif pattern_name == "subprocess":
+        diff = f"+ import subprocess\n+ subprocess.call(['ls'])"
+    else:
+        diff = f"+ {pattern_name}('test')"
+    
+    result = build_smt_diff(diff)
+    assert result == "(assert false)"
