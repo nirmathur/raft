@@ -47,3 +47,46 @@ poetry run pytest
 # Run governor
 poetry run python -m agent.core.governor
 ```
+
+## CLI Usage
+
+RAFT provides a command-line interface for managing the agent system:
+
+```bash
+# Install RAFT (from this directory)
+poetry install
+
+# Show help
+raft --help
+
+# Run continuous governor loop with metrics server
+raft run                    # Metrics on http://localhost:8002/metrics
+raft run --metrics-port 9090
+raft run --cycle-interval 2.0
+
+# Run a single cycle and get JSON status
+raft one-cycle
+
+# Show version
+raft version
+```
+
+### CLI Commands
+
+- **`raft run`**: Starts the continuous governor loop with Prometheus metrics server
+  - `--metrics-port`: Port for metrics server (default: 8002)
+  - `--cycle-interval`: Seconds between cycles (default: 1.0)
+  
+- **`raft one-cycle`**: Executes exactly one governor cycle and outputs JSON:
+  ```json
+  {
+    "status": "success",
+    "rho": 0.456,
+    "energy": 1234567.89
+  }
+  ```
+  
+- **`raft version`**: Displays the current RAFT version
+
+- **Global options**:
+  - `--verbose, -v`: Enable verbose logging
