@@ -1,0 +1,15 @@
+groups:
+- name: raft-alerts
+  rules:
+  - alert: SpectralRadiusTooHigh
+    expr: raft_spectral_radius > 0.9
+    for: 1m
+    labels: { severity: critical }
+    annotations:
+      summary: "Spectral radius high ({{ $value }} > 0.9)"
+  - alert: EnergyRateTooHigh
+    expr: raft_energy_rate_j_s > 2 * HERMES_BASELINE_JOULES_PER_SECOND
+    for: 1m
+    labels: { severity: warning }
+    annotations:
+      summary: "Energy rate high ({{ $value }} J/s)"
