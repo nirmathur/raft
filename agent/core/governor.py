@@ -29,6 +29,7 @@ import hashlib
 from pathlib import Path
 
 import numpy as np
+import torch
 from loguru import logger
 
 from agent.core.charter import load_clauses
@@ -36,7 +37,8 @@ from agent.core.energy_guard import measure_block
 from agent.core.event_log import record
 from agent.core.smt_verifier import verify  # real Z3 wrapper (Beta)
 # ────────────────── internal imports (raft core) ─────────────────────────
-from agent.core.spectral import spectral_radius
+from agent.core.spectral import spectral_radius, estimate_spectral_radius
+from agent.core.model import SimpleNet
 
 # ────────────────── charter & constants ─────────────────────────────────
 
@@ -50,6 +52,10 @@ MAX_SPECTRAL_RADIUS: float = 0.9
 # Redis proof‑cache TTL is set inside smt_verifier (24 h)
 
 # ────────────────── helpers (to be replaced in Pilot) ───────────────────
+
+# Global model instance for spectral analysis
+# In production, this would be the actual cognitive model
+_SPECTRAL_MODEL = SimpleNet(in_dim=4, out_dim=4, hidden_dim=16)
 
 
 def _fake_jacobian() -> np.ndarray:  # placeholder while no model params
@@ -109,8 +115,9 @@ def run_one_cycle() -> bool:
             return False
 
         # 2 ─── Spectral‑radius guard (xˣ‑17)
-        J = _fake_jacobian()
-        rho = spectral_radius(J)
+        # Use real PyTorch-based spectral radius estimation
+        x0 = torch.randn(4, requires_grad=True)  # Random input point
+        rho = estimate_spectral_radius(_SPECTRAL_MODEL, x0, n_iter=10)
         SPECTRAL_RHO.set(rho)
 
         if rho >= MAX_SPECTRAL_RADIUS:
