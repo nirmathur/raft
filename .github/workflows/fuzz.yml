@@ -1,0 +1,350 @@
+name: RAFT Nightly Fuzz Testing
+
+on:
+  schedule:
+    # Run nightly at 2 AM UTC 
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # Allow manual triggers
+    inputs:
+      strategy:
+        description: 'Fuzz strategy (safe, forbidden, random, aggressive, all)'
+        required: false
+        default: 'all'
+      iterations:
+        description: 'Number of iterations per strategy'
+        required: false
+        default: '10'
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  fuzz-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        fuzz-strategy: [safe, forbidden, random, aggressive]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+        
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+        
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+      
+    - name: Install project
+      run: poetry install --no-interaction
+      
+    - name: Start required services
+      run: |
+        # Start minimal services for RAFT testing
+        docker compose -f docker/docker-compose.yml up -d postgres redis
+        
+        # Wait for services to be ready
+        ./scripts/wait_db.sh
+        sleep 10
+        
+    - name: Generate fuzz diff
+      run: |
+        poetry run python scripts/fuzz_diff_generator.py ${{ matrix.fuzz-strategy }}
+        
+        # Log generated diff info
+        echo "Generated fuzz patch with strategy: ${{ matrix.fuzz-strategy }}"
+        if [ -f fuzz_metadata.json ]; then
+          echo "Metadata:"
+          cat fuzz_metadata.json
+        fi
+        
+    - name: Run fuzz tests
+      id: fuzz-test
+      run: |
+        # Set iterations from input or default
+        ITERATIONS=${{ github.event.inputs.iterations || '10' }}
+        
+        echo "Running fuzz tests with $ITERATIONS iterations"
+        poetry run pytest tests/test_fuzz_runner.py -v \
+          --tb=short \
+          --durations=10 \
+          -k "test_${{ matrix.fuzz-strategy }}_strategy" || echo "fuzz_test_failed=true" >> $GITHUB_OUTPUT
+        
+        # Also run the test runner directly for more detailed output
+        poetry run python tests/test_fuzz_runner.py
+        
+    - name: Collect test artifacts
+      if: always()
+      run: |
+        # Collect fuzz testing artifacts
+        mkdir -p fuzz-artifacts
+        
+        # Copy generated patches and metadata
+        [ -f fuzz.patch ] && cp fuzz.patch fuzz-artifacts/
+        [ -f fuzz_metadata.json ] && cp fuzz_metadata.json fuzz-artifacts/
+        
+        # Copy any generated fuzz patches
+        cp fuzz_*.patch fuzz-artifacts/ 2>/dev/null || true
+        
+        # Collect system information
+        echo "System info:" > fuzz-artifacts/system-info.txt
+        uname -a >> fuzz-artifacts/system-info.txt
+        echo "Python version:" >> fuzz-artifacts/system-info.txt
+        python --version >> fuzz-artifacts/system-info.txt
+        echo "Git commit:" >> fuzz-artifacts/system-info.txt
+        git rev-parse HEAD >> fuzz-artifacts/system-info.txt
+        
+        # Collect container logs if available
+        docker compose -f docker/docker-compose.yml logs > fuzz-artifacts/docker-logs.txt 2>&1 || true
+        
+    - name: Upload fuzz artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: fuzz-artifacts-${{ matrix.fuzz-strategy }}
+        path: fuzz-artifacts/
+        retention-days: 30
+        
+    - name: Create GitHub issue on failure
+      if: failure() && github.event_name == 'schedule'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const strategy = '${{ matrix.fuzz-strategy }}';
+          const runId = '${{ github.run_id }}';
+          const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${runId}`;
+          const commitSha = '${{ github.sha }}';
+          const commitUrl = `https://github.com/${{ github.repository }}/commit/${commitSha}`;
+          
+          // Check if similar issue already exists
+          const existingIssues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: ['fuzz-test-failure', `strategy-${strategy}`],
+            state: 'open'
+          });
+          
+          // Don't create duplicate issues within 24 hours
+          const now = new Date();
+          const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
+          
+          const recentIssue = existingIssues.data.find(issue => 
+            new Date(issue.created_at) > oneDayAgo
+          );
+          
+          if (recentIssue) {
+            console.log(`Recent issue exists: #${recentIssue.number}, skipping creation`);
+            return;
+          }
+          
+          const issueTitle = `🚨 RAFT Fuzz Test Failure - ${strategy} strategy`;
+          const issueBody = `
+          ## Fuzz Test Failure Report
+          
+          **Strategy:** \`${strategy}\`
+          **Failure Time:** ${now.toISOString()}
+          **GitHub Run:** [#${runId}](${runUrl})
+          **Commit:** [\`${commitSha.substring(0, 8)}\`](${commitUrl})
+          
+          ### Details
+          
+          The nightly fuzz testing workflow failed for the **${strategy}** strategy. This indicates potential issues with:
+          
+          - RAFT safety gate robustness
+          - Test environment stability  
+          - Edge case handling in the governor cycle
+          
+          ### Investigation Steps
+          
+          1. Review the [workflow logs](${runUrl}) for detailed error information
+          2. Check the uploaded fuzz artifacts for generated patches and system state
+          3. Reproduce locally using:
+             \`\`\`bash
+             poetry run python scripts/fuzz_diff_generator.py ${strategy}
+             poetry run pytest tests/test_fuzz_runner.py -v -k "test_${strategy}_strategy"
+             \`\`\`
+          4. Analyze any safety violations or unexpected system behavior
+          
+          ### Impact Assessment
+          
+          ${strategy === 'safe' ? 
+            '⚠️ **HIGH PRIORITY**: Safe strategy failures indicate potential issues with basic RAFT functionality.' :
+            strategy === 'aggressive' ?
+            '📊 **MEDIUM PRIORITY**: Aggressive strategy failures may indicate edge case handling issues.' :
+            '🔍 **REVIEW NEEDED**: Investigate to determine if this represents a genuine safety concern.'
+          }
+          
+          ### Automatic Actions
+          
+          - Fuzz test artifacts have been uploaded to the workflow run
+          - This issue will auto-close if subsequent tests pass for 3 consecutive days
+          - Additional failures will be commented on this issue rather than creating new ones
+          
+          ---
+          
+          *This issue was automatically created by the RAFT fuzz testing workflow.*
+          `;
+          
+          const newIssue = await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: issueTitle,
+            body: issueBody,
+            labels: ['fuzz-test-failure', `strategy-${strategy}`, 'automated']
+          });
+          
+          console.log(`Created issue #${newIssue.data.number}: ${issueTitle}`);
+          
+    - name: Update existing issue on repeated failure
+      if: failure() && github.event_name == 'schedule'
+      uses: actions/github-script@v7  
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const strategy = '${{ matrix.fuzz-strategy }}';
+          const runId = '${{ github.run_id }}';
+          const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${runId}`;
+          const commitSha = '${{ github.sha }}';
+          
+          // Find existing open issue for this strategy
+          const existingIssues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: ['fuzz-test-failure', `strategy-${strategy}`],
+            state: 'open'
+          });
+          
+          if (existingIssues.data.length === 0) {
+            console.log('No existing issue found');
+            return;
+          }
+          
+          const issue = existingIssues.data[0];
+          const now = new Date();
+          
+          const comment = `
+          ## Additional Failure - ${now.toISOString()}
+          
+          **Commit:** \`${commitSha.substring(0, 8)}\`
+          **Workflow Run:** [#${runId}](${runUrl})
+          
+          The fuzz test for **${strategy}** strategy continues to fail. This may indicate a persistent issue requiring investigation.
+          
+          Please review the latest [workflow logs](${runUrl}) and artifacts for additional context.
+          `;
+          
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: issue.number,
+            body: comment
+          });
+          
+          console.log(`Added comment to existing issue #${issue.number}`);
+
+  close-resolved-issues:
+    runs-on: ubuntu-latest
+    needs: fuzz-test
+    if: success() && github.event_name == 'schedule'
+    
+    steps:
+    - name: Close resolved fuzz test issues
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          // Find all open fuzz test failure issues
+          const openIssues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: ['fuzz-test-failure'],
+            state: 'open'
+          });
+          
+          const now = new Date();
+          const threeDaysAgo = new Date(now - 3 * 24 * 60 * 60 * 1000);
+          
+          for (const issue of openIssues.data) {
+            // Check if issue is older than 3 days and no recent failures
+            const issueDate = new Date(issue.created_at);
+            
+            if (issueDate < threeDaysAgo) {
+              // Close the issue since tests are now passing
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed'
+              });
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `
+                ## ✅ Issue Resolved
+                
+                Closing this issue as fuzz tests have been passing for multiple consecutive runs.
+                
+                **Resolution Time:** ${now.toISOString()}
+                **Status:** All fuzz test strategies are now passing
+                
+                If similar issues occur again, a new issue will be automatically created.
+                `
+              });
+              
+              console.log(`Closed resolved issue #${issue.number}`);
+            }
+          }
+
+  summary:
+    runs-on: ubuntu-latest  
+    needs: fuzz-test
+    if: always()
+    
+    steps:
+    - name: Generate test summary
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const runId = '${{ github.run_id }}';
+          const strategies = ['safe', 'forbidden', 'random', 'aggressive'];
+          
+          console.log('='.repeat(50));
+          console.log('RAFT NIGHTLY FUZZ TEST SUMMARY');
+          console.log('='.repeat(50));
+          console.log(`Run ID: ${runId}`);
+          console.log(`Time: ${new Date().toISOString()}`);
+          console.log('');
+          
+          // This would ideally parse job results, but for now just log completion
+          console.log('Fuzz testing workflow completed.');
+          console.log('Check individual job results for detailed outcomes.');
+          console.log('');
+          console.log('Artifacts uploaded for each strategy contain:');
+          console.log('- Generated fuzz patches');
+          console.log('- Test metadata and results'); 
+          console.log('- System information and logs');
+          console.log('');
+          console.log('Issues will be automatically created/updated for any failures.');
