@@ -32,6 +32,7 @@ import numpy as np
 from loguru import logger
 
 from agent.core.charter import load_clauses
+from agent.core.config import get_config
 from agent.core.energy_guard import measure_block
 from agent.core.event_log import record
 from agent.core.smt_verifier import verify  # real Z3 wrapper (Beta)
@@ -89,8 +90,12 @@ def run_one_cycle() -> bool:
     """
     macs_estimate = 1_000_000_000  # TODO: real count when brain added
 
+    # Get current configuration for dynamic thresholds
+    config = get_config()
+    current_rho_max = config.rho_max
+    
     # Set spectral threshold metric
-    SPECTRAL_THRESHOLD.set(MAX_SPECTRAL_RADIUS)
+    SPECTRAL_THRESHOLD.set(current_rho_max)
 
     with PROC_LATENCY.time():
         # 1 ─── Z3 proof gate
@@ -113,9 +118,9 @@ def run_one_cycle() -> bool:
         rho = spectral_radius(J)
         SPECTRAL_RHO.set(rho)
 
-        if rho >= MAX_SPECTRAL_RADIUS:
+        if rho >= current_rho_max:
             logger.error(
-                "Spectral radius %.3f ≥ limit %.2f — rollback", rho, MAX_SPECTRAL_RADIUS
+                "Spectral radius %.3f ≥ limit %.2f — rollback", rho, current_rho_max
             )
             record("spectral‑breach", {"rho": rho})
             CHARTER_VIOLATIONS.labels(clause="x^x-17").inc()

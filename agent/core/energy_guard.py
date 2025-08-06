@@ -12,6 +12,7 @@ from typing import Optional
 
 from loguru import logger
 
+from agent.core.config import get_config
 from agent.metrics import ENERGY_BUDGET, ENERGY_RATE, ENERGY_TOTAL
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -74,12 +75,16 @@ def _read_joules() -> float:
 
 def check_budget(used_joules: float, macs: int) -> None:
     """
-    Enforce a hard energy budget: used_joules ≤ 2×HERMES_J_PER_MAC × macs.
+    Enforce a hard energy budget: used_joules ≤ energy_multiplier×HERMES_J_PER_MAC × macs.
 
     Raises SystemExit("Energy apoptosis triggered") on breach.
     """
+    # Get current energy multiplier from dynamic config
+    config = get_config()
+    energy_multiplier = config.energy_multiplier
+    
     # Compute allowed energy for this operation
-    limit = macs * HERMES_J_PER_MAC * APOPTOSIS_MULTIPLIER
+    limit = macs * HERMES_J_PER_MAC * energy_multiplier
 
     # Update energy metrics
     ENERGY_BUDGET.set(limit)
