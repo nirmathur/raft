@@ -1,0 +1,254 @@
+{
+  "summary": {
+    "total_benchmarks": 21,
+    "total_time": 0.041575608000054366,
+    "avg_time_per_benchmark": 0.001979790857145446,
+    "max_time": 0.006100344666644257,
+    "min_time": 0.0009934690000363844,
+    "performance_insights": [
+      "SMT solver scales well: 100.0x size increase \u2192 1.9x time increase",
+      "Forbidden pattern detection adds overhead: 1.6x slower than safe diffs"
+    ]
+  },
+  "detailed_results": {
+    "size_scaling": [
+      {
+        "diff_size": 393,
+        "line_count": 10,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.0032186546666631934,
+        "smt_result": "(assert true)",
+        "risk_score": 0.2,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 928,
+        "line_count": 25,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.0010507683333382072,
+        "smt_result": "(assert true)",
+        "risk_score": 0.35,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 1566,
+        "line_count": 50,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.001146788666668878,
+        "smt_result": "(assert true)",
+        "risk_score": 0.6,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 3027,
+        "line_count": 100,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.0014319693333391115,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 6451,
+        "line_count": 200,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.001938022000009217,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 15406,
+        "line_count": 500,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.0034034103333434964,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 30693,
+        "line_count": 1000,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.006100344666644257,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      }
+    ],
+    "forbidden_patterns": [
+      {
+        "diff_size": 3184,
+        "line_count": 100,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.0014479889999847728,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 3291,
+        "line_count": 100,
+        "file_count": 1,
+        "has_forbidden": true,
+        "has_function_renames": false,
+        "smt_build_time": 0.0019064580000076603,
+        "smt_result": "(assert false)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 3327,
+        "line_count": 100,
+        "file_count": 1,
+        "has_forbidden": true,
+        "has_function_renames": false,
+        "smt_build_time": 0.0019938290000141023,
+        "smt_result": "(assert false)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 3287,
+        "line_count": 100,
+        "file_count": 1,
+        "has_forbidden": true,
+        "has_function_renames": false,
+        "smt_build_time": 0.002406226000005063,
+        "smt_result": "(assert false)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 3501,
+        "line_count": 100,
+        "file_count": 1,
+        "has_forbidden": true,
+        "has_function_renames": false,
+        "smt_build_time": 0.0031609569999773157,
+        "smt_result": "(assert false)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      }
+    ],
+    "function_renames": [
+      {
+        "diff_size": 160,
+        "line_count": 2,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": true,
+        "smt_build_time": 0.0009934690000363844,
+        "smt_result": "(assert true)",
+        "risk_score": 0.315,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 520,
+        "line_count": 10,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": true,
+        "smt_build_time": 0.0010903480000479249,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 1096,
+        "line_count": 20,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": true,
+        "smt_build_time": 0.001255888999992294,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 2016,
+        "line_count": 40,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": true,
+        "smt_build_time": 0.0014079119999905743,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 5112,
+        "line_count": 100,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": true,
+        "smt_build_time": 0.0020538349999696948,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      }
+    ],
+    "file_scaling": [
+      {
+        "diff_size": 3061,
+        "line_count": 100,
+        "file_count": 1,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.0014038690000006682,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 3851,
+        "line_count": 100,
+        "file_count": 5,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.0013940410000259362,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 4448,
+        "line_count": 100,
+        "file_count": 10,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.0013737840000089818,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      },
+      {
+        "diff_size": 5950,
+        "line_count": 100,
+        "file_count": 20,
+        "has_forbidden": false,
+        "has_function_renames": false,
+        "smt_build_time": 0.0013970439999866358,
+        "smt_result": "(assert true)",
+        "risk_score": 1.0,
+        "memory_usage_mb": 0
+      }
+    ]
+  }
+}
