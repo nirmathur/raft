@@ -530,13 +530,23 @@ RAFT includes a Z3-based proof gate (`agent.core.smt_verifier`) that validates s
 
 ### Counterexample Format
 
-When a proof fails (SAT result), the verifier extracts variable assignments that violate the safety properties:
+When a proof fails (UNSAT result), the verifier indicates the failure reason:
 
 ```json
 {
     "result": false,
     "counterexample": {
-        "variable_name": "value",
+        "reason": "formula_unsatisfiable"
+    }
+}
+```
+
+For successful proofs (SAT result) with variables, includes model assignments:
+
+```json
+{
+    "result": true,
+    "counterexample": {
         "x": 15,
         "y": 3,
         "flag": "true"
@@ -544,7 +554,7 @@ When a proof fails (SAT result), the verifier extracts variable assignments that
 }
 ```
 
-For successful proofs (UNSAT result):
+For simple successful proofs (SAT result) without variables:
 
 ```json
 {
@@ -586,3 +596,5 @@ is_safe = verify_bool(smt_formula, charter_hash)  # Returns boolean
 ### Caching
 
 Results are cached in Redis for 24 hours, keyed by SHA-256 hash of the SMT formula and charter hash. Failed proofs cache their counterexamples for faster retrieval.
+
+Cache keys are `sha256(smt) : charter_hash` (see `_cache_key`).

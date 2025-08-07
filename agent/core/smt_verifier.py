@@ -7,6 +7,8 @@ Successful proofs are cached 24 h keyed on diff + charter hash.
 Failed proofs cache counterexamples showing variable assignments that violate safety.
 
 Counterexample Format:
+SAT (formula satisfiable) → proof passes; UNSAT → proof fails.
+
 When a proof fails (UNSAT result), returns a JSON object indicating unsatisfiability:
 {
     "result": false,
@@ -36,7 +38,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Dict, Any, Union, Optional
+from typing import Dict, Any, Union, Optional, List
 
 import redis
 from z3 import Solver, parse_smt2_string, sat, unsat, unknown
@@ -79,10 +81,10 @@ def _set_cache(key: str, value: str) -> None:
         pass
 
 
-def _extract_model(solver: Solver) -> Dict[str, Any]:
+def _extract_model(solver: Solver) -> Dict[str, Union[int, str]]:
     """Extract variable assignments from SAT solver model."""
     model = solver.model()
-    assignments = {}
+    assignments: Dict[str, Union[int, str]] = {}
     
     for decl in model:
         var_name = str(decl)
@@ -94,6 +96,8 @@ def _extract_model(solver: Solver) -> Dict[str, Any]:
         elif hasattr(var_value, 'as_fraction'):
             frac = var_value.as_fraction()
             assignments[var_name] = str(frac)
+        elif hasattr(var_value, 'is_real') and var_value.is_real():
+            assignments[var_name] = str(var_value.as_decimal(10))
         elif hasattr(var_value, 'sexpr'):
             # For complex types, use string representation
             assignments[var_name] = str(var_value)
@@ -127,22 +131,30 @@ def verify(diff: str, charter_hash: str) -> Union[bool, Dict[str, Any]]:
     cached = _get_cached(key)
     
     if cached is not None:
+        # Handle legacy cache format (simple "0"/"1" strings)
         if cached == "1":
             return {"result": True, "counterexample": None}
-        else:
-            # Try to parse cached counterexample
+        elif cached == "0":
+            return {"result": False, "counterexample": {"reason": "formula_unsatisfiable"}}
+        elif cached not in ("0", "1"):
+            # Try to parse cached JSON data
             try:
                 cache_data = json.loads(cached)
                 if isinstance(cache_data, dict) and "counterexample" in cache_data:
                     return {"result": cache_data["result"], "counterexample": cache_data["counterexample"]}
             except (json.JSONDecodeError, KeyError):
                 pass
-            # Fallback for old cache format
-            return {"result": False, "counterexample": {}}
+            # Fallback for corrupted cache
+            return {"result": False, "counterexample": {"reason": "cache_error"}}
 
     solver = Solver()
     try:
-        solver.add(parse_smt2_string(diff))
+        # Handle Z3 version compatibility for parse_smt2_string
+        parsed = parse_smt2_string(diff)
+        if isinstance(parsed, list):
+            solver.add(*parsed)
+        else:
+            solver.add(parsed)
     except Exception as exc:  # malformed SMT
         error_result = {"result": False, "counterexample": {"error": str(exc)}}
         _set_cache(key, json.dumps(error_result))
@@ -158,25 +170,23 @@ def verify(diff: str, charter_hash: str) -> Union[bool, Dict[str, Any]]:
         if model_assignments:
             # Include variable assignments for formulas with variables
             result = {"result": True, "counterexample": model_assignments}
-            _set_cache(key, json.dumps(result))
         else:
             # Simple case with no variables
             result = {"result": True, "counterexample": None}
-            _set_cache(key, "1")  # Keep simple format for positive cache
         
+        # Use consistent JSON caching for both cases
+        _set_cache(key, json.dumps(result))
         return result
         
     elif check_result == unsat:
         # Proof fails - formula is unsatisfiable (safety condition violated)
-        # For UNSAT formulas, we can't extract counterexamples from the model
-        # But we can still return a structured failure response
         result = {"result": False, "counterexample": {"reason": "formula_unsatisfiable"}}
         _set_cache(key, json.dumps(result))
         return result
         
     else:  # unknown
         # Solver couldn't determine - treat as failure with unknown status
-        result = {"result": False, "counterexample": {"status": "unknown"}}
+        result = {"result": False, "counterexample": {"reason": "solver_unknown"}}
         _set_cache(key, json.dumps(result))
         return result
 
@@ -193,4 +203,4 @@ def verify_bool(diff: str, charter_hash: str) -> bool:
     result = verify(diff, charter_hash)
     if isinstance(result, dict):
         return result["result"]
-    return result  # Fallback for direct boolean returns
+    return result  # type: ignore  # Fallback for direct boolean returns (can't happen now)

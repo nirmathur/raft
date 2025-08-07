@@ -1,5 +1,8 @@
 import hashlib
 import json
+import time
+
+import pytest
 
 from agent.core.smt_verifier import verify, verify_bool
 
@@ -23,6 +26,7 @@ COMPLEX_SAT_FORMULA = """
 """
 
 
+@pytest.mark.timeout(2)
 def test_good_diff_passes_and_caches():
     """Test that safe SMT yields True quickly and caches result."""
     result = verify(GOOD_DIFF, CHARTER_HASH)
@@ -35,6 +39,7 @@ def test_good_diff_passes_and_caches():
     assert cached_result["counterexample"] is None
 
 
+@pytest.mark.timeout(2)
 def test_bad_diff_fails_and_caches():
     """Test that unsafe SMT yields False and caches result."""
     result = verify(BAD_DIFF, CHARTER_HASH)
@@ -46,8 +51,10 @@ def test_bad_diff_fails_and_caches():
     cached_result = verify(BAD_DIFF, CHARTER_HASH)
     assert cached_result["result"] is False  # cache hit
     assert isinstance(cached_result["counterexample"], dict)
+    assert cached_result["counterexample"]["reason"] == "formula_unsatisfiable"
 
 
+@pytest.mark.timeout(2)
 def test_satisfiable_formula_with_variables_returns_model():
     """Test that satisfiable SMT with variables returns model assignments."""
     result = verify(SAFE_SMT_WITH_VARS, CHARTER_HASH + "_vars")
@@ -64,6 +71,7 @@ def test_satisfiable_formula_with_variables_returns_model():
     assert any("y" in str(name) for name in variable_names)
 
 
+@pytest.mark.timeout(2)
 def test_complex_satisfiable_formula():
     """Test satisfiable formula with different types of variables."""
     result = verify(COMPLEX_SAT_FORMULA, CHARTER_HASH + "_complex")
@@ -79,6 +87,13 @@ def test_complex_satisfiable_formula():
     assert any("b" in str(name) for name in variable_names)
 
 
+@pytest.mark.timeout(2)
+def test_safe_formula_fast():
+    """Test that simple safe formulas are processed quickly."""
+    assert verify_bool("(assert true)", CHARTER_HASH + "_fast")
+
+
+@pytest.mark.timeout(2)
 def test_backward_compatibility_bool_interface():
     """Test that verify_bool provides backward compatibility."""
     # Test safe case
@@ -106,6 +121,7 @@ def test_counterexample_caching():
     result1 = verify(BAD_DIFF, CHARTER_HASH + "_cache_test")
     assert result1["result"] is False
     assert isinstance(result1["counterexample"], dict)
+    assert result1["counterexample"]["reason"] == "formula_unsatisfiable"
     
     # Second call - should retrieve from cache
     result2 = verify(BAD_DIFF, CHARTER_HASH + "_cache_test")
@@ -133,6 +149,33 @@ def test_model_assignment_caching():
     assert result1["counterexample"] == result2["counterexample"]
 
 
+def test_cache_hit_performance():
+    """Test that cache hits are significantly faster than first computation."""
+    test_key = CHARTER_HASH + "_perf_test"
+    
+    # First call - compute and cache
+    start_time = time.perf_counter()
+    result1 = verify(SAFE_SMT_WITH_VARS, test_key)
+    first_duration = time.perf_counter() - start_time
+    
+    # Second call - should be cache hit
+    start_time = time.perf_counter()
+    result2 = verify(SAFE_SMT_WITH_VARS, test_key)
+    cache_duration = time.perf_counter() - start_time
+    
+    # Results should be identical
+    assert result1 == result2
+    
+    # Cache hit should be much faster (skip if Redis not available)
+    try:
+        from agent.core.smt_verifier import REDIS
+        if REDIS is not None:
+            assert cache_duration < 0.01, f"Cache hit too slow: {cache_duration:.4f}s"
+            assert cache_duration < first_duration / 2, "Cache hit should be much faster"
+    except ImportError:
+        pass  # Skip timing test if Redis unavailable
+
+
 def test_counterexample_format_validation():
     """Test that counterexample has proper JSON-serializable format."""
     result = verify(BAD_DIFF, CHARTER_HASH + "_format_test")
@@ -142,6 +185,8 @@ def test_counterexample_format_validation():
     parsed_back = json.loads(json_str)
     
     assert isinstance(parsed_back, dict)
+    assert "reason" in parsed_back
+    assert parsed_back["reason"] == "formula_unsatisfiable"
 
 
 def test_unsatisfiable_formula_with_explicit_contradiction():
@@ -157,3 +202,21 @@ def test_unsatisfiable_formula_with_explicit_contradiction():
     assert result["result"] is False  # UNSAT means proof fails
     assert isinstance(result["counterexample"], dict)
     assert result["counterexample"]["reason"] == "formula_unsatisfiable"
+
+
+def test_solver_unknown_handling():
+    """Test handling of solver unknown results."""
+    # Create a formula that might return unknown (though rare with simple formulas)
+    # This is more for code coverage than realistic scenarios
+    complex_formula = """
+    (declare-const x Real)
+    (assert (> (* x x x x) 1000000))
+    (assert (< x 10))
+    """
+    
+    result = verify(complex_formula, CHARTER_HASH + "_unknown_test")
+    # Should either be SAT (True) or unknown (False with solver_unknown reason)
+    assert isinstance(result["result"], bool)
+    if not result["result"]:
+        assert "reason" in result["counterexample"]
+        assert result["counterexample"]["reason"] in ["formula_unsatisfiable", "solver_unknown"]
