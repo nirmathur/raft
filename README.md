@@ -14,6 +14,21 @@ RAFT is a recursive agent system with formal trust guarantees, featuring spectra
 - `OPERATOR_TOKEN`: Bearer token for operator API authentication (default: "devtoken")
 - `ENERGY_GUARD_ENABLED`: Enable/disable energy monitoring (default: "true", set to "false" to disable)
 
+#### Drift Detection Configuration
+
+- `DRIFT_WINDOW`: Sliding-window size (*N* cycles) for spectral-radius drift detection (default: `10`).
+  A larger window smooths out noise but delays alerting; a smaller window reacts
+  faster at the risk of false positives.
+
+Drift detection enforces charter clauses xˣ-19 / xˣ-24 / xˣ-25 by raising an
+alert when:
+
+1. Rolling *mean* drift between consecutive spectral-radius measurements exceeds `0.05`, **or**
+2. Any single jump (*max* drift) exceeds `0.10`.
+
+The thresholds are hard-coded in `agent/core/drift_monitor.py` and should only be
+modified with proper charter approval.
+
 ### Ports
 
 The system uses the following ports:
