@@ -134,7 +134,7 @@ class DriftMonitor:
         mean_drift = mean(diffs)
         max_drift = max(diffs)
 
-        # update Prometheus gauges
+        # Update Prometheus gauges
         DRIFT_MEAN.set(mean_drift)
         DRIFT_MAX.set(max_drift)
 
@@ -152,5 +152,6 @@ class DriftMonitor:
                 "max_drift": max_drift,
                 "window": list(self._values),
             }
-            logger.error("drift-alert — DriftMonitor triggered alert: %s", context)
+            # Emit a local warning; canonical event emission happens in governor.
+            logger.warning("DriftMonitor alert: %s", context)
             raise DriftAlert(context)

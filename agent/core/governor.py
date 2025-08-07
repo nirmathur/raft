@@ -135,8 +135,8 @@ def run_one_cycle() -> bool:
             try:
                 _DRIFT_MONITOR.record(rho)
             except DriftAlert as alert:
-                logger.error("Drift alert: %s", alert.context)
-                logger.info("drift-alert context=%s", alert.context)
+                # Canonical drift-alert emission (logger + event log)
+                logger.error("drift-alert context=%s", alert.context)
                 record("drift-alert", {"rho": rho, **alert.context})
                 CHARTER_VIOLATIONS.labels(clause="x^x-19").inc()
                 return False

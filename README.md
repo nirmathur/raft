@@ -607,6 +607,7 @@ Test coverage includes:
 This implementation updates the Prometheus metric `raft_spectral_radius` in real-time, enabling Grafana monitoring:
 
 - **Metric Name**: `raft_spectral_radius` (copy-paste ready for Grafana queries)
+- **New Gauges**: `raft_drift_mean`, `raft_drift_max` (drift-monitor)
 - **Update Frequency**: Every governor cycle
 - **Automatic Rollback**: Triggered when ρ ≥ 0.9
 - **Real-time Monitoring**: Live spectral stability tracking

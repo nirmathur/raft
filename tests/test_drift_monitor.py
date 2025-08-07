@@ -82,3 +82,22 @@ def test_context_structure():
     ctx = exc.value.context
     assert set(ctx.keys()) == {"mean_drift", "max_drift", "window"}
     assert len(ctx["window"]) <= dm.window_size
+
+
+def test_env_threshold_overrides(monkeypatch):
+    """Environment variables should override threshold defaults."""
+    monkeypatch.setenv("DRIFT_MEAN_THRESHOLD", "0.01")
+    monkeypatch.setenv("DRIFT_MAX_THRESHOLD", "0.02")
+    from importlib import reload
+    import agent.core.drift_monitor as dm_mod
+
+    reload(dm_mod)  # Apply env vars
+    DM = dm_mod.DriftMonitor
+    DA = dm_mod.DriftAlert
+
+    dm_inst = DM(window_size=3)
+    # Sequence that triggers both thresholds (diff 0.015, 0.03):
+    with pytest.raises(DA):
+        dm_inst.record(0.0)
+        dm_inst.record(0.02)  # diff 0.02 > mean 0.01 & max 0.02 == threshold
+        dm_inst.record(0.05)  # diff 0.03 > max threshold
