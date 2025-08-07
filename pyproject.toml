@@ -21,10 +21,13 @@ fastapi = "^0.104.0"
 uvicorn = {extras = ["standard"], version = "^0.24.0"}
 prometheus-client = "^0.20.0"
 torch = "^2.3"
+pyyaml = "^6.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
 pytest-mock = "^3.14.1"
+pytest-asyncio = "^0.21.0"
+httpx = "^0.24.0"
 black = "^25.1.0"
 isort = "^6.0.1"
 pre-commit = "^4.2.0"
