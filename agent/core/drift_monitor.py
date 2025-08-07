@@ -33,15 +33,17 @@ from typing import Deque, List
 
 from loguru import logger
 
-__all__ = ["DriftMonitor", "DriftAlert"]
+from agent.metrics import DRIFT_MEAN, DRIFT_MAX
+
+__all__ = ["DriftAlert", "DriftMonitor"]
 
 
 class DriftAlert(RuntimeError):
     """Raised when spectral-radius drift exceeds allowed thresholds."""
 
-    def __init__(self, context: dict):
+    def __init__(self, context: dict[str, float | List[float]]):
         super().__init__("Spectral radius drift detected")
-        self.context = context
+        self.context: dict[str, float | List[float]] = context
 
     def __str__(self) -> str:  # pragma: no cover – delegated to logger mostly
         return f"DriftAlert(context={self.context})"
@@ -65,13 +67,19 @@ class DriftMonitor:
         self,
         window_size: int | None = None,
         *,
-        mean_threshold: float = 0.05,
-        max_threshold: float = 0.10,
+        mean_threshold: float | None = None,
+        max_threshold: float | None = None,
     ) -> None:
         if window_size is None:
             window_size = int(os.getenv("DRIFT_WINDOW", "10"))
         if window_size < 2:
             raise ValueError("window_size must be at least 2 to compute drift")
+
+        # Apply env-level overrides for thresholds
+        if mean_threshold is None:
+            mean_threshold = float(os.getenv("DRIFT_MEAN_THRESHOLD", "0.05"))
+        if max_threshold is None:
+            max_threshold = float(os.getenv("DRIFT_MAX_THRESHOLD", "0.10"))
 
         self.window_size: int = window_size
         self.mean_threshold: float = mean_threshold
@@ -126,6 +134,10 @@ class DriftMonitor:
         mean_drift = mean(diffs)
         max_drift = max(diffs)
 
+        # update Prometheus gauges
+        DRIFT_MEAN.set(mean_drift)
+        DRIFT_MAX.set(max_drift)
+
         logger.debug(
             "DriftMonitor.update ρ=%.6f mean_drift=%.6f max_drift=%.6f window=%s",
             rho_f,
@@ -140,5 +152,5 @@ class DriftMonitor:
                 "max_drift": max_drift,
                 "window": list(self._values),
             }
-            logger.warning("DriftMonitor triggered alert: %s", context)
+            logger.error("drift-alert — DriftMonitor triggered alert: %s", context)
             raise DriftAlert(context)

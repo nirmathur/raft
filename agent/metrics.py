@@ -69,6 +69,17 @@ MEMORY_USAGE = Gauge("raft_memory_bytes", "Current memory usage in bytes")
 
 CPU_USAGE = Gauge("raft_cpu_percent", "Current CPU usage percentage")
 
+# Drift monitoring metrics
+DRIFT_MEAN = Gauge(
+    "raft_drift_mean",
+    "Rolling mean of spectral-radius drift (|Δρ|) over the sliding window",
+)
+
+DRIFT_MAX = Gauge(
+    "raft_drift_max",
+    "Maximum single-step spectral-radius drift (|Δρ|) in the sliding window",
+)
+
 # Charter compliance metrics
 CHARTER_VIOLATIONS = Counter(
     "raft_charter_violations_total",

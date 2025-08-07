@@ -130,12 +130,13 @@ def run_one_cycle() -> bool:
         rho = _SPECTRAL_MODEL.estimate_spectral_radius(x0, n_iter=10)
         SPECTRAL_RHO.set(rho)
 
-        # ─── multi-cycle drift monitor (xˣ-19) ──────────────────────────
+        # ─── multi-cycle drift guard (xˣ-19) ────────────────────────────
         if _DRIFT_MONITOR is not None:
             try:
                 _DRIFT_MONITOR.record(rho)
             except DriftAlert as alert:
                 logger.error("Drift alert: %s", alert.context)
+                logger.info("drift-alert context=%s", alert.context)
                 record("drift-alert", {"rho": rho, **alert.context})
                 CHARTER_VIOLATIONS.labels(clause="x^x-19").inc()
                 return False

@@ -49,3 +49,36 @@ def test_spikes_and_oscillations(sequence):
     with pytest.raises(DriftAlert):
         for rho in sequence:
             dm.record(rho)
+
+
+# mean drift breach without max breach
+def test_mean_only_breach():
+    """Mean drift above threshold triggers alert even if max drift below."""
+    dm = DriftMonitor(window_size=4, mean_threshold=0.025, max_threshold=0.2)
+    sequence = [0.00, 0.03, 0.06, 0.09]  # diffs 0.03 each, mean 0.03 > 0.025 but max 0.03 < 0.2
+    with pytest.raises(DriftAlert) as exc:
+        for rho in sequence:
+            dm.record(rho)
+    ctx = exc.value.context
+    assert ctx["mean_drift"] > dm.mean_threshold
+    assert ctx["max_drift"] < dm.max_threshold
+
+
+# equality threshold should not raise
+@pytest.mark.parametrize("delta", [0.05, 0.10])
+def test_equal_threshold_no_alert(delta):
+    dm = DriftMonitor(window_size=2)
+    dm.record(0.00)
+    dm.record(delta)  # diff equals threshold; should not raise
+
+
+# verify context structure
+def test_context_structure():
+    dm = DriftMonitor(window_size=3)
+    with pytest.raises(DriftAlert) as exc:
+        dm.record(0.0)
+        dm.record(0.2)
+        dm.record(0.4)
+    ctx = exc.value.context
+    assert set(ctx.keys()) == {"mean_drift", "max_drift", "window"}
+    assert len(ctx["window"]) <= dm.window_size
