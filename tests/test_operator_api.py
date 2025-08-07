@@ -37,9 +37,9 @@ def client():
 
 @pytest.fixture
 def temp_config_file():
-    """Temporary config file for testing."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-        config_path = f.name
+    """Temporary config file for testing - Windows compatible."""
+    fd, config_path = tempfile.mkstemp(suffix='.yaml')
+    os.close(fd)  # Close the file descriptor immediately
     
     # Set the config path temporarily
     with patch('agent.core.config_store._config_path', Path(config_path)):
@@ -215,10 +215,10 @@ class TestConfigIntegration:
     
     def test_config_validation_in_store(self):
         """Test that config store validates values correctly."""
-        with pytest.raises(ValueError, match="rho_max must be in \\(0, 1\\)"):
+        with pytest.raises(ValueError, match="Configuration validation failed.*Input should be less than 1"):
             update_config({"rho_max": 1.5})
         
-        with pytest.raises(ValueError, match="energy_multiplier must be in \\[1, 4\\]"):
+        with pytest.raises(ValueError, match="Configuration validation failed.*Input should be less than or equal to 4"):
             update_config({"energy_multiplier": 5.0})
     
     def test_config_defaults(self, temp_config_file):

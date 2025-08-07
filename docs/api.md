@@ -118,8 +118,39 @@ curl -X POST \
   "detail": [
     {
       "loc": ["body", "rho_max"],
-      "msg": "rho_max must be in range (0, 1)",
-      "type": "value_error"
+      "msg": "Input should be less than 1",
+      "input": 1.2,
+      "type": "less_than",
+      "ctx": {"lt": 1.0}
+    }
+  ]
+}
+```
+
+**Example Validation Failure:**
+```bash
+curl -X POST \
+     -H "Authorization: Bearer devtoken" \
+     -H "Content-Type: application/json" \
+     -d '{"rho_max": 1.5, "energy_multiplier": 5.0}' \
+     http://localhost:8001/config
+
+# Response (422):
+{
+  "detail": [
+    {
+      "type": "less_than",
+      "loc": ["body", "rho_max"],
+      "msg": "Input should be less than 1",
+      "input": 1.5,
+      "ctx": {"lt": 1.0}
+    },
+    {
+      "type": "less_than_equal", 
+      "loc": ["body", "energy_multiplier"],
+      "msg": "Input should be less than or equal to 4",
+      "input": 5.0,
+      "ctx": {"le": 4.0}
     }
   ]
 }
@@ -197,6 +228,18 @@ Configuration updates and model reloads are automatically logged:
 - **Event recording**: Via `record()` function for audit persistence
 - **Metrics**: Prometheus counters for operational monitoring
 
+### Prometheus Metrics
+
+The operator API exposes the following metrics for monitoring:
+
+- `raft_model_reload_total`: Counter tracking successful model reloads
+- `raft_spectral_radius`: Current spectral radius value 
+- `raft_spectral_threshold`: Current spectral radius threshold (dynamic)
+- `raft_cycles_total`: Total governor cycles completed
+- `raft_proof_pass_total` / `raft_proof_fail_total`: Proof verification stats
+
+Access metrics at: `http://localhost:8002/metrics` (when governor is running)
+
 ## Examples
 
 ### Update Spectral Radius Threshold
@@ -245,10 +288,12 @@ curl -H "Authorization: Bearer devtoken" \
 ## Security Considerations
 
 - **Token-based authentication**: All endpoints require valid Bearer token
-- **Input validation**: Request payloads are strictly validated
+- **Input validation**: Request payloads are strictly validated using Pydantic
 - **Audit logging**: All configuration changes are logged and recorded
 - **Safe defaults**: Invalid configurations are rejected, system continues with current values
 - **Atomic updates**: Configuration changes are all-or-nothing
+- **Thread safety**: Configuration updates use locks to prevent race conditions
+- **Cross-platform persistence**: Atomic file operations work on Windows and POSIX systems
 
 ## Troubleshooting
 

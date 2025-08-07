@@ -10,12 +10,20 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Annotated, Any, Dict
 
 import yaml
 from loguru import logger
+from pydantic import BaseModel, Field, ValidationError
+
+
+class ConfigValidator(BaseModel):
+    """Pydantic model for config validation - single source of truth."""
+    rho_max: Annotated[float, Field(gt=0, lt=1, description="Spectral radius threshold")]
+    energy_multiplier: Annotated[float, Field(ge=1, le=4, description="Energy consumption multiplier")]
 
 
 @dataclass
@@ -29,22 +37,25 @@ class Config:
     energy_multiplier: float = 2.0
     
     def validate(self) -> None:
-        """Validate configuration values.
+        """Validate configuration values using Pydantic.
         
         Raises
         ------
         ValueError
             If any configuration value is invalid
         """
-        if not (0 < self.rho_max < 1):
-            raise ValueError(f"rho_max must be in (0, 1), got {self.rho_max}")
-        if not (1 <= self.energy_multiplier <= 4):
-            raise ValueError(f"energy_multiplier must be in [1, 4], got {self.energy_multiplier}")
+        try:
+            ConfigValidator(rho_max=self.rho_max, energy_multiplier=self.energy_multiplier)
+        except ValidationError as e:
+            # Convert Pydantic validation error to simpler ValueError
+            error_details = "; ".join([f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors()])
+            raise ValueError(f"Configuration validation failed: {error_details}")
 
 
 # Global singleton config instance
 _config = Config()
 _config_path = Path(os.getenv("RAFT_CONFIG_PATH", "config.yaml"))
+_config_lock = threading.Lock()
 
 
 def get_config() -> Config:
@@ -60,6 +71,8 @@ def get_config() -> Config:
 
 def update_config(updates: Dict[str, Any]) -> Config:
     """Update configuration with validation and persistence.
+    
+    Thread-safe: Uses a lock to prevent race conditions during concurrent updates.
     
     Parameters
     ----------
@@ -78,22 +91,23 @@ def update_config(updates: Dict[str, Any]) -> Config:
     """
     global _config
     
-    # Create new config with updates
-    new_values = asdict(_config)
-    new_values.update(updates)
-    new_config = Config(**new_values)
-    
-    # Validate before applying
-    new_config.validate()
-    
-    # Apply updates atomically
-    _config = new_config
-    
-    # Persist to disk
-    _save_config()
-    
-    logger.info(f"Configuration updated: {updates}")
-    return _config
+    with _config_lock:
+        # Create new config with updates
+        new_values = asdict(_config)
+        new_values.update(updates)
+        new_config = Config(**new_values)
+        
+        # Validate before applying
+        new_config.validate()
+        
+        # Apply updates atomically
+        _config = new_config
+        
+        # Persist to disk
+        _save_config()
+        
+        logger.info(f"Configuration updated: {updates}")
+        return _config
 
 
 def load_config() -> Config:
@@ -138,28 +152,29 @@ def _save_config() -> None:
         config_dir = _config_path.parent
         config_dir.mkdir(parents=True, exist_ok=True)
         
-        with tempfile.NamedTemporaryFile(
-            mode='w', 
+        # Use mkstemp for better Windows compatibility (closes file handle properly)
+        fd, temp_path = tempfile.mkstemp(
             dir=config_dir, 
             prefix='.config_', 
-            suffix='.tmp',
-            delete=False
-        ) as f:
-            yaml.safe_dump(asdict(_config), f, default_flow_style=False)
-            temp_path = f.name
-        
-        # Atomic rename
-        os.rename(temp_path, _config_path)
+            suffix='.tmp'
+        )
+        try:
+            with os.fdopen(fd, 'w') as f:
+                yaml.safe_dump(asdict(_config), f, default_flow_style=False)
+            
+            # Atomic rename (cross-platform: handles Windows + existing target)
+            os.replace(temp_path, _config_path)
+        except:
+            # Clean up temp file if writing failed
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+            raise
         logger.debug(f"Configuration saved to {_config_path}")
         
     except Exception as e:
         logger.error(f"Failed to save configuration: {e}")
-        # Clean up temp file if it exists
-        try:
-            if 'temp_path' in locals():
-                os.unlink(temp_path)
-        except:
-            pass
         raise
 
 

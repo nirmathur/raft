@@ -21,9 +21,10 @@ import torch
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
-from pydantic import BaseModel, Field, field_validator
+from typing import Annotated
+from pydantic import BaseModel, Field
 
-from agent.core.config_store import get_config, update_config
+from agent.core.config_store import get_config, update_config, ConfigValidator
 from agent.core.escape_hatches import (is_paused, load_state, request_kill,
                                        request_pause)
 from agent.core.event_log import record
@@ -32,15 +33,8 @@ TOKEN = os.getenv("OPERATOR_TOKEN", "devtoken")  # set in docker-compose.yml
 
 app = FastAPI(title="RAFT Operator API")
 
-# Prometheus metrics for model reload tracking
-try:
-    from prometheus_client import Counter
-    MODEL_RELOAD_COUNT = Counter('raft_model_reload_total', 'Total model reloads')
-except ImportError:
-    # Fallback for environments without prometheus_client
-    class MockCounter:
-        def inc(self): pass
-    MODEL_RELOAD_COUNT = MockCounter()
+# Import model reload counter from metrics module
+from agent.metrics import MODEL_RELOAD_COUNT
 
 
 def _auth(request: Request):
@@ -52,26 +46,8 @@ class PauseReq(BaseModel):
     flag: bool
 
 
-class ConfigUpdateReq(BaseModel):
-    """Configuration update request model with validation."""
-    rho_max: float = Field(..., gt=0, lt=1, description="Spectral radius threshold")
-    energy_multiplier: float = Field(
-        ..., ge=1, le=4, description="Energy consumption multiplier"
-    )
-
-    @field_validator('rho_max')
-    @classmethod
-    def validate_rho_max(cls, v):
-        if not (0 < v < 1):
-            raise ValueError('rho_max must be in range (0, 1)')
-        return v
-
-    @field_validator('energy_multiplier')
-    @classmethod
-    def validate_energy_multiplier(cls, v):
-        if not (1 <= v <= 4):
-            raise ValueError('energy_multiplier must be in range [1, 4]')
-        return v
+# Use the shared validator as the API request model
+ConfigUpdateReq = ConfigValidator
 
 
 @app.get("/state")
@@ -165,6 +141,10 @@ async def reload_model(request: Request):
         
         # Replace the global model (hot swap)
         _SPECTRAL_MODEL.load_state_dict(new_model.state_dict())
+        
+        # Update the governor's model reference to prevent dangling references
+        import agent.core.governor
+        agent.core.governor._SPECTRAL_MODEL = _SPECTRAL_MODEL
         
         # Measure fresh spectral radius
         x0 = torch.randn(4, requires_grad=True)
