@@ -97,7 +97,8 @@ def _extract_model(solver: Solver) -> Dict[str, Union[int, str]]:
             frac = var_value.as_fraction()
             assignments[var_name] = str(frac)
         elif hasattr(var_value, 'is_real') and var_value.is_real():
-            assignments[var_name] = str(var_value.as_decimal(10))
+            dec = var_value.as_decimal(10)
+            assignments[var_name] = str(dec).rstrip("?")
         elif hasattr(var_value, 'sexpr'):
             # For complex types, use string representation
             assignments[var_name] = str(var_value)
