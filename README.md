@@ -14,6 +14,26 @@ RAFT is a recursive agent system with formal trust guarantees, featuring spectra
 - `OPERATOR_TOKEN`: Bearer token for operator API authentication (default: "devtoken")
 - `ENERGY_GUARD_ENABLED`: Enable/disable energy monitoring (default: "true", set to "false" to disable)
 
+#### Drift Detection Configuration
+
+- `DRIFT_WINDOW`: Sliding-window size (*N* cycles) for spectral-radius drift detection (default: `10`).
+  A larger window smooths out noise but delays alerting; a smaller window reacts
+  faster at the risk of false positives.
+
+- `DRIFT_MEAN_THRESHOLD`: Rolling-mean drift threshold (absolute |Δρ|, default `0.05`).
+- `DRIFT_MAX_THRESHOLD`: Maximum single-step drift threshold (absolute |Δρ|, default `0.10`).
+
+Tuning guideline: set *mean_threshold* roughly to expected noise σ; choose *max_threshold* at ≈2–3 × σ to catch genuine spikes.
+
+Drift detection enforces charter clauses xˣ-19 / xˣ-24 / xˣ-25 by raising an
+alert when:
+
+1. Rolling *mean* drift between consecutive spectral-radius measurements exceeds `0.05`, **or**
+2. Any single jump (*max* drift) exceeds `0.10`.
+
+The thresholds are hard-coded in `agent/core/drift_monitor.py` and should only be
+modified with proper charter approval.
+
 ### Ports
 
 The system uses the following ports:
@@ -373,7 +393,7 @@ Parse Git diff into structured AST representation.
 #### `DiffAST`
 - `added_lines`: List of added lines
 - `removed_lines`: List of removed lines
-- `modified_files`: Set of modified file paths
+- `modified_files`: Set of file paths
 - `function_renames`: Dictionary of function renames
 - `function_signatures`: Dictionary of function signatures
 
@@ -494,7 +514,7 @@ print(f"Spectral radius: {rho:.6f}")
 The governor (`agent/core/governor.py`) automatically uses the spectral radius estimator during each cycle:
 
 ```python
-# 2 ─── Spectral‑radius guard (xˣ‑17)
+# 2 ─── Spectral-radius guard (xˣ-17)
 x0 = torch.randn(4, requires_grad=True)  # Random input point
 rho = _SPECTRAL_MODEL.estimate_spectral_radius(x0, n_iter=10)
 
@@ -587,6 +607,7 @@ Test coverage includes:
 This implementation updates the Prometheus metric `raft_spectral_radius` in real-time, enabling Grafana monitoring:
 
 - **Metric Name**: `raft_spectral_radius` (copy-paste ready for Grafana queries)
+- **New Gauges**: `raft_drift_mean`, `raft_drift_max` (drift-monitor)
 - **Update Frequency**: Every governor cycle
 - **Automatic Rollback**: Triggered when ρ ≥ 0.9
 - **Real-time Monitoring**: Live spectral stability tracking
@@ -610,7 +631,3 @@ This implementation satisfies charter clause x^x-17 by providing:
 `SimpleNet.create_stable_model(in_dim, out_dim, target_rho=0.8, method='xavier')`
 returns a network whose initial spectral radius is _guaranteed_ below
 `target_rho`.  It is what the governor loads by default.
-
-
-
-

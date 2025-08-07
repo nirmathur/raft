@@ -32,6 +32,16 @@ import numpy as np
 import torch
 from loguru import logger
 
+# ────────────────── drift detection ─────────────────────────────────────
+try:
+    from agent.core.drift_monitor import DriftMonitor, DriftAlert  # noqa: WPS433
+
+    _DRIFT_MONITOR = DriftMonitor()
+except Exception as _err:  # pragma: no cover – should never fail
+    # Fallback: keep governor functional even if drift monitor unavailable
+    logger.error("Failed to initialise DriftMonitor: %s", _err)
+    _DRIFT_MONITOR = None  # type: ignore
+
 from agent.core.charter import load_clauses
 from agent.core.energy_guard import measure_block
 from agent.core.event_log import record
@@ -119,6 +129,17 @@ def run_one_cycle() -> bool:
         x0 = torch.randn(4, requires_grad=True)  # Random input point
         rho = _SPECTRAL_MODEL.estimate_spectral_radius(x0, n_iter=10)
         SPECTRAL_RHO.set(rho)
+
+        # ─── multi-cycle drift guard (xˣ-19) ────────────────────────────
+        if _DRIFT_MONITOR is not None:
+            try:
+                _DRIFT_MONITOR.record(rho)
+            except DriftAlert as alert:
+                # Canonical drift-alert emission (logger + event log)
+                logger.error("drift-alert context=%s", alert.context)
+                record("drift-alert", {"rho": rho, **alert.context})
+                CHARTER_VIOLATIONS.labels(clause="x^x-19").inc()
+                return False
 
         if rho >= MAX_SPECTRAL_RADIUS:
             logger.error(
