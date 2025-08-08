@@ -68,6 +68,18 @@ poetry run pytest
 poetry run python -m agent.core.governor
 ```
 
+### CLI
+
+Use the lightweight CLI for common tasks:
+
+```bash
+poetry run raft version
+poetry run raft one-cycle
+poetry run raft run --metrics-port 8002 --interval 0.5
+```
+
+Metrics are exposed on the selected `--metrics-port`.
+
 
 ## SMT-LIB2 Diff Analysis
 
