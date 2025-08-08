@@ -99,6 +99,12 @@ def main():
     server = HTTPServer(("localhost", 8003), MetricsHandler)
     print("🚀 Starting metrics server on http://localhost:8003/metrics")
     print("📊 Prometheus can scrape metrics from this endpoint")
+    print("🔄 Metrics will reset when no new data is received")
+
+    # Reset metrics on startup
+    SPECTRAL_RADIUS_GAUGE.set(0.0)
+    ENERGY_RATE_GAUGE.set(0.0)
+
     server.serve_forever()
 
 

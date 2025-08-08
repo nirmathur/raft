@@ -90,3 +90,6 @@ CHARTER_VIOLATIONS = Counter(
 CHARTER_COMPLIANCE = Gauge(
     "raft_charter_compliance_ratio", "Ratio of compliant operations (0.0 to 1.0)"
 )
+
+# Model management metrics
+MODEL_RELOAD_COUNT = Counter("raft_model_reload_total", "Successful model reloads")

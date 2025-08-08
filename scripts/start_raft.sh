@@ -27,6 +27,10 @@ METRICS_PID=$!
 echo "⏳ Waiting for metrics server to be ready..."
 sleep 3
 
+# Setup persistent Grafana dashboard
+echo "📈 Setting up persistent Grafana dashboard..."
+poetry run python scripts/setup_grafana_persistent.py
+
 # Check if everything is running
 echo "🔍 Checking service status..."
 

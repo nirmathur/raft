@@ -412,6 +412,47 @@ poetry run pytest tests/test_diff_builder.py
 poetry run pytest tests/test_diff_builder.py -v
 ```
 
+### Fuzz Testing
+
+RAFT includes multiple fuzz testing harnesses for comprehensive validation:
+
+#### Basic Fuzz Testing
+```bash
+# Quick fuzz test (1000 samples)
+poetry run python scripts/fuzz_proofs.py
+```
+
+#### Enhanced Fuzz Testing with Real-time Metrics
+```bash
+# Enhanced fuzz test with Prometheus metrics
+poetry run python scripts/fuzz_proofs_enhanced.py 100
+
+# Run in background for continuous testing
+poetry run python scripts/fuzz_proofs_enhanced.py 500 &
+```
+
+#### Advanced Fuzz Harness v2
+```bash
+# Run comprehensive fuzz v2 tests
+poetry run python scripts/fuzz_proofs_v2.py 100
+
+# Run with CI requirements (strict mode)
+poetry run python scripts/fuzz_proofs_v2.py 100 --ci
+
+# Run with verbose output
+poetry run python scripts/fuzz_proofs_v2.py 100 --verbose
+
+# Run baseline tests only
+poetry run python scripts/fuzz_proofs_v2.py --baseline-only
+```
+
+**Fuzz v2 Features:**
+- **Charter Pattern Injection**: Tests injection of forbidden patterns from charter
+- **Signature Mismatch Detection**: Tests function signature changes trigger `(assert false)`
+- **Multi-hunk Line Tracking**: Tests correct line number preservation in complex diffs
+- **Cache Fall-back Paths**: Tests performance with large/complex diffs
+- **CI Integration**: Fails if P95 latency > 3× baseline or any mismatches detected
+
 ### Test Categories
 
 - **Git Diff Parsing**: Tests for parsing various diff formats
@@ -419,6 +460,7 @@ poetry run pytest tests/test_diff_builder.py -v
 - **Forbidden Pattern Detection**: Tests for security violation detection
 - **Function Rename Analysis**: Tests for signature preservation
 - **Edge Cases**: Tests for malformed inputs and error handling
+- **Fuzz Testing**: Comprehensive fuzz testing with multiple harnesses
 
 ## Implementation Details
 

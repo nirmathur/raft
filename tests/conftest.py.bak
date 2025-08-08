@@ -1,0 +1,41 @@
+import pytest
+from unittest.mock import Mock, patch
+from httpx import AsyncClient, ASGITransport
+
+TOKEN = "test-token"
+HEADERS = {"authorization": f"Bearer {TOKEN}"}
+
+@pytest.fixture(autouse=True)
+def _setup_test_environment():
+    """Setup test environment with mocks and cleanup.
+    
+    Ensures all tests run with:
+    - Mocked Redis to avoid external dependencies
+    - System unpaused after test completion
+    - Default configuration restored after each test
+    - Clean global state between tests
+    """
+    # Mock Redis to avoid external dependency
+    with patch('agent.core.smt_verifier.REDIS') as mock_redis:
+        # Mock Redis get/set methods
+        mock_redis.get.return_value = None  # No cached results
+        mock_redis.set.return_value = True  # Successful cache writes
+        mock_redis.setex.return_value = True  # Successful TTL cache writes
+        
+        yield
+        
+        # Cleanup after test
+        try:
+            # Reset pause state directly via escape hatches module
+            from agent.core.escape_hatches import request_pause
+            from agent.core.config_store import update_config
+            
+            # Reset pause state
+            request_pause(False)
+            
+            # Reset configuration to defaults (using internal API to avoid HTTP calls)
+            update_config({"rho_max": 0.9, "energy_multiplier": 2.0})
+            
+        except Exception:
+            # If reset fails, don't break other tests
+            pass

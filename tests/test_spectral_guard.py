@@ -8,9 +8,27 @@ from agent.core.model import SimpleNet
 
 def test_radius_ok():
     """Test that stable spectral radius allows cycle completion."""
-    # Use the stable model (should pass)
-    result = run_one_cycle()
-    assert result is True
+    # Ensure we have a fresh stable model before testing
+    from agent.core import governor
+    from agent.core.model import SimpleNet
+
+    # Save original model
+    original_model = governor._SPECTRAL_MODEL
+
+    try:
+        # Create a fresh stable model for this test
+        stable_model = SimpleNet.create_stable_model(
+            in_dim=4, out_dim=4, target_rho=0.8
+        )
+        governor._SPECTRAL_MODEL = stable_model
+
+        # Use the stable model (should pass)
+        result = run_one_cycle()
+        assert result is True
+
+    finally:
+        # Restore original model
+        governor._SPECTRAL_MODEL = original_model
 
 
 def test_radius_breach():
@@ -101,13 +119,21 @@ def test_guard_sets_prometheus_metric():
 
     from agent.core import governor
 
-    # monkey-patch an obviously unstable model
-    unstable = SimpleNet(in_dim=4, out_dim=4, hidden_dim=16, activation="identity")
-    for m in unstable.modules():
-        if isinstance(m, nn.Linear):
-            m.weight.data.fill_(3.0)
-    governor._SPECTRAL_MODEL = unstable  # noqa: SLF001  (test-only)
+    # Save original model
+    original_model = governor._SPECTRAL_MODEL
 
-    assert governor.run_one_cycle() is False
-    metric_val = REGISTRY.get_sample_value("raft_spectral_radius")
-    assert metric_val >= governor.MAX_SPECTRAL_RADIUS
+    try:
+        # monkey-patch an obviously unstable model
+        unstable = SimpleNet(in_dim=4, out_dim=4, hidden_dim=16, activation="identity")
+        for m in unstable.modules():
+            if isinstance(m, nn.Linear):
+                m.weight.data.fill_(3.0)
+        governor._SPECTRAL_MODEL = unstable  # noqa: SLF001  (test-only)
+
+        assert governor.run_one_cycle() is False
+        metric_val = REGISTRY.get_sample_value("raft_spectral_radius")
+        assert metric_val >= governor.MAX_SPECTRAL_RADIUS
+
+    finally:
+        # Restore original model
+        governor._SPECTRAL_MODEL = original_model

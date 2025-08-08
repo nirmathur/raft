@@ -56,8 +56,16 @@ CLAUSES = load_clauses()
 CHARTER_PATH = Path(__file__).parents[2] / "charter.md"
 CHARTER_HASH = hashlib.sha256(CHARTER_PATH.read_bytes()).hexdigest()
 
-# Hard limit from clause xˣ‑17
-MAX_SPECTRAL_RADIUS: float = 0.9
+# Dynamic limit from clause xˣ‑17 (now configurable via operator API)
+from agent.core.config_store import get_config
+
+
+def _get_max_spectral_radius() -> float:
+    """Get current spectral radius limit from dynamic config."""
+    return get_config().rho_max
+
+
+MAX_SPECTRAL_RADIUS: float = 0.9  # Default fallback
 
 # Redis proof‑cache TTL is set inside smt_verifier (24 h)
 
@@ -105,8 +113,9 @@ def run_one_cycle() -> bool:
     """
     macs_estimate = 1_000_000_000  # TODO: real count when brain added
 
-    # Set spectral threshold metric
-    SPECTRAL_THRESHOLD.set(MAX_SPECTRAL_RADIUS)
+    # Set spectral threshold metric (using dynamic config)
+    current_max_rho = _get_max_spectral_radius()
+    SPECTRAL_THRESHOLD.set(current_max_rho)
 
     with PROC_LATENCY.time():
         # 1 ─── Z3 proof gate
@@ -141,9 +150,9 @@ def run_one_cycle() -> bool:
                 CHARTER_VIOLATIONS.labels(clause="x^x-19").inc()
                 return False
 
-        if rho >= MAX_SPECTRAL_RADIUS:
+        if rho >= current_max_rho:
             logger.error(
-                "Spectral radius %.3f ≥ limit %.2f — rollback", rho, MAX_SPECTRAL_RADIUS
+                "Spectral radius %.3f ≥ limit %.2f — rollback", rho, current_max_rho
             )
             record("spectral‑breach", {"rho": rho})
             CHARTER_VIOLATIONS.labels(clause="x^x-17").inc()

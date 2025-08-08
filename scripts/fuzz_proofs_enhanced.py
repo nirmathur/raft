@@ -76,16 +76,21 @@ def generate_malicious_code() -> str:
 def update_metrics(test_result: Dict):
     """Update Prometheus metrics with real test data."""
     try:
+        # Get real spectral radius from the governor's model
+        import torch
+
+        from agent.core.governor import _SPECTRAL_MODEL
+
+        # Use real spectral radius from the governor's model
+        x0 = torch.ones(4, requires_grad=True)
+        real_spectral_radius = _SPECTRAL_MODEL.estimate_spectral_radius(x0, n_iter=10)
+
         # Send metrics update to the metrics server
         data = {
             "cycle_count": 1,
             "proof_pass": 1 if test_result.get("proof_result", False) else 0,
             "proof_fail": 0 if test_result.get("proof_result", False) else 1,
-            "spectral_radius": (
-                random.uniform(0.8, 1.2)
-                if test_result.get("is_malicious", False)
-                else random.uniform(0.1, 0.6)
-            ),
+            "spectral_radius": float(real_spectral_radius),  # Real spectral radius!
             "energy_rate": random.uniform(0.1, 50.0),
             "cycle_latency": test_result.get("duration", 0.001),
         }
@@ -128,7 +133,7 @@ def run_fuzz_test(test_id: int) -> Dict:
         governor_result = run_one_cycle()
 
         # Also verify the SMT proof directly
-        proof_result = verify(smt_diff)
+        proof_result = verify(smt_diff, CHARTER_HASH)
 
         # Determine if test passed
         test_passed = (proof_result == expected_result) and (governor_result == True)
