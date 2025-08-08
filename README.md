@@ -50,7 +50,7 @@ The system uses the following ports:
 
 ```bash
 cd docker
-docker-compose up -d
+docker compose up -d
 ```
 
 The operator API will be available at `http://localhost:8001` with the token set in the environment.
