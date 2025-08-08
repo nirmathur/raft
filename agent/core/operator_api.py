@@ -24,8 +24,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from agent.core.config_store import ConfigValidator, get_config, update_config
-from agent.core.escape_hatches import (is_paused, load_state, request_kill,
-                                       request_pause)
+from agent.core.escape_hatches import is_paused, load_state, request_kill, request_pause
 from agent.core.event_log import record
 
 TOKEN = os.getenv("OPERATOR_TOKEN", "devtoken")  # set in docker-compose.yml

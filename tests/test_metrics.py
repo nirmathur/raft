@@ -6,9 +6,16 @@ from unittest.mock import patch
 
 import pytest
 
-from agent.metrics import (CHARTER_VIOLATIONS, CYCLE_COUNT, ENERGY_RATE,
-                           PROC_LATENCY, PROOF_FAILURE, PROOF_SUCCESS,
-                           SPECTRAL_RHO, SPECTRAL_THRESHOLD)
+from agent.metrics import (
+    CHARTER_VIOLATIONS,
+    CYCLE_COUNT,
+    ENERGY_RATE,
+    PROC_LATENCY,
+    PROOF_FAILURE,
+    PROOF_SUCCESS,
+    SPECTRAL_RHO,
+    SPECTRAL_THRESHOLD,
+)
 
 
 class TestMetrics:

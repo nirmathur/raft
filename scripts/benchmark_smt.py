@@ -24,8 +24,11 @@ from typing import Any, Dict, List
 # Add the project root to the path to import our modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agent.core.diff_builder import (analyze_diff_context, build_smt_diff,
-                                     parse_diff_to_ast)
+from agent.core.diff_builder import (
+    analyze_diff_context,
+    build_smt_diff,
+    parse_diff_to_ast,
+)
 
 
 @dataclass

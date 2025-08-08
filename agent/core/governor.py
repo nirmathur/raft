@@ -3,9 +3,17 @@ from __future__ import annotations
 import time
 
 from agent.core.escape_hatches import is_paused, start_watchdog
-from agent.metrics import (CHARTER_VIOLATIONS, CYCLE_COUNT, CYCLE_DURATION,
-                           ENERGY_RATE, PROC_LATENCY, PROOF_FAILURE,
-                           PROOF_SUCCESS, SPECTRAL_RHO, SPECTRAL_THRESHOLD)
+from agent.metrics import (
+    CHARTER_VIOLATIONS,
+    CYCLE_COUNT,
+    CYCLE_DURATION,
+    ENERGY_RATE,
+    PROC_LATENCY,
+    PROOF_FAILURE,
+    PROOF_SUCCESS,
+    SPECTRAL_RHO,
+    SPECTRAL_THRESHOLD,
+)
 
 start_watchdog()
 
@@ -34,7 +42,8 @@ from loguru import logger
 
 # ────────────────── drift detection ─────────────────────────────────────
 try:
-    from agent.core.drift_monitor import DriftMonitor, DriftAlert  # noqa: WPS433
+    from agent.core.drift_monitor import DriftAlert  # noqa: WPS433
+    from agent.core.drift_monitor import DriftMonitor
 
     _DRIFT_MONITOR = DriftMonitor()
 except Exception as _err:  # pragma: no cover – should never fail
@@ -47,6 +56,7 @@ from agent.core.energy_guard import measure_block
 from agent.core.event_log import record
 from agent.core.model import SimpleNet
 from agent.core.smt_verifier import verify  # real Z3 wrapper (Beta)
+
 # ────────────────── internal imports (raft core) ─────────────────────────
 from agent.core.spectral import estimate_spectral_radius, spectral_radius
 

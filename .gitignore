@@ -9,3 +9,6 @@ logs/
 *.log
 # OS junk
 .DS_Store
+fuzz.patch
+
+fuzz.patch

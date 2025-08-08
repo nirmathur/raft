@@ -12,8 +12,12 @@ from unittest.mock import patch
 import pytest
 
 import agent.core.energy_guard as eg
-from agent.core.energy_guard import (HERMES_J_PER_MAC, _read_joules,
-                                     check_budget, measure_block)
+from agent.core.energy_guard import (
+    HERMES_J_PER_MAC,
+    _read_joules,
+    check_budget,
+    measure_block,
+)
 
 # Compute the same baseline the module uses at 1 GHz
 BASELINE = HERMES_J_PER_MAC * 1_000_000_000
@@ -30,9 +34,10 @@ def reset_state():
 
 class TestReadJoules:
     def test_read_joules_rapl_available(self):
-        with patch("os.path.exists", return_value=True), patch(
-            "builtins.open", create=True
-        ) as mock_open:
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("builtins.open", create=True) as mock_open,
+        ):
             mock_open.return_value.__enter__.return_value.read.return_value = "5000000"
             # First call initializes → 0.0
             assert _read_joules() == 0.0
@@ -41,10 +46,11 @@ class TestReadJoules:
             assert energy >= 0.0
 
     def test_read_joules_fallback(self):
-        with patch("os.path.exists", return_value=False), patch(
-            "agent.core.energy_guard._last_sample_time", 1000.0
-        ), patch("agent.core.energy_guard._last_total_joules", 0.0), patch(
-            "time.time", side_effect=[1000.0, 1001.0]
+        with (
+            patch("os.path.exists", return_value=False),
+            patch("agent.core.energy_guard._last_sample_time", 1000.0),
+            patch("agent.core.energy_guard._last_total_joules", 0.0),
+            patch("time.time", side_effect=[1000.0, 1001.0]),
         ):
             # Init
             assert _read_joules() == 0.0

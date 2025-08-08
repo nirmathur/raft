@@ -1,12 +1,19 @@
 import pytest
 
-from agent.core.diff_builder import (DiffAST, DiffLine, FunctionSignature,
-                                     GitDiffParser, SMTDiffBuilder,
-                                     analyze_diff_context, build_advanced_smt,
-                                     build_smt_diff, build_smt_with_charter,
-                                     calculate_risk_score,
-                                     extract_forbidden_from_charter,
-                                     parse_diff_to_ast)
+from agent.core.diff_builder import (
+    DiffAST,
+    DiffLine,
+    FunctionSignature,
+    GitDiffParser,
+    SMTDiffBuilder,
+    analyze_diff_context,
+    build_advanced_smt,
+    build_smt_diff,
+    build_smt_with_charter,
+    calculate_risk_score,
+    extract_forbidden_from_charter,
+    parse_diff_to_ast,
+)
 
 
 class TestGitDiffParser:
@@ -412,8 +419,10 @@ def test_location_metadata_preserved():
 
 def test_charter_pattern_merging():
     """Test that charter patterns are properly merged with defaults."""
-    from agent.core.diff_builder import (DEFAULT_FORBIDDEN_PATTERNS,
-                                         get_forbidden_patterns)
+    from agent.core.diff_builder import (
+        DEFAULT_FORBIDDEN_PATTERNS,
+        get_forbidden_patterns,
+    )
 
     charter_clauses = {
         "x^x-98": "forbidden `custom_dangerous` - Custom dangerous pattern",

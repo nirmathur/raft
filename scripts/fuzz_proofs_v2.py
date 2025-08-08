@@ -24,8 +24,12 @@ import pathlib
 
 from agent.core.diff_builder import build_smt_diff
 from agent.core.smt_verifier import verify
-from tests.fuzzlib import (FuzzTest, calculate_p95_latency,
-                           generate_all_fuzz_tests, run_fuzz_test_suite)
+from tests.fuzzlib import (
+    FuzzTest,
+    calculate_p95_latency,
+    generate_all_fuzz_tests,
+    run_fuzz_test_suite,
+)
 
 CHARTER_HASH = hashlib.sha256(pathlib.Path("charter.md").read_bytes()).hexdigest()
 

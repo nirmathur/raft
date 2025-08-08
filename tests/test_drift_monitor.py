@@ -55,7 +55,12 @@ def test_spikes_and_oscillations(sequence):
 def test_mean_only_breach():
     """Mean drift above threshold triggers alert even if max drift below."""
     dm = DriftMonitor(window_size=4, mean_threshold=0.025, max_threshold=0.2)
-    sequence = [0.00, 0.03, 0.06, 0.09]  # diffs 0.03 each, mean 0.03 > 0.025 but max 0.03 < 0.2
+    sequence = [
+        0.00,
+        0.03,
+        0.06,
+        0.09,
+    ]  # diffs 0.03 each, mean 0.03 > 0.025 but max 0.03 < 0.2
     with pytest.raises(DriftAlert) as exc:
         for rho in sequence:
             dm.record(rho)
@@ -89,6 +94,7 @@ def test_env_threshold_overrides(monkeypatch):
     monkeypatch.setenv("DRIFT_MEAN_THRESHOLD", "0.01")
     monkeypatch.setenv("DRIFT_MAX_THRESHOLD", "0.02")
     from importlib import reload
+
     import agent.core.drift_monitor as dm_mod
 
     reload(dm_mod)  # Apply env vars

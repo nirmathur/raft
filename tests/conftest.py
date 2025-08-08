@@ -17,13 +17,11 @@ def _setup_test_environment():
     - Default configuration restored after each test
     - Clean global state between tests
     """
-    # Mock Redis to avoid external dependency
-    with patch("agent.core.smt_verifier.REDIS") as mock_redis:
-        # Mock Redis get/set methods
-        mock_redis.get.return_value = None  # No cached results
-        mock_redis.set.return_value = True  # Successful cache writes
-        mock_redis.setex.return_value = True  # Successful TTL cache writes
-
+    # Disable Redis everywhere during tests
+    with (
+        patch("agent.core.smt_verifier.REDIS", new=None, create=True),
+        patch("agent.core.smt_verifier._get_redis", return_value=None, create=True),
+    ):
         yield
 
         # Cleanup after test
