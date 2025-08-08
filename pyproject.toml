@@ -37,6 +37,15 @@ requests = "^2.32.4"
 [tool.poetry.scripts]
 raft = "agent.cli:main"
 
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+py_version = 311
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"

@@ -12,8 +12,12 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 
-from scripts.compare_baseline import (baseline_computation, raft_computation,
-                                      run_comparison, write_csv)
+from scripts.compare_baseline import (
+    baseline_computation,
+    raft_computation,
+    run_comparison,
+    write_csv,
+)
 
 
 class TestBaselineComputation:
@@ -50,9 +54,11 @@ class TestRaftComputation:
     def test_raft_computation_success_with_metrics(self):
         """Test RAFT computation when governor succeeds and metrics are available."""
         # Mock the governor and metrics modules
-        with patch("agent.core.governor.run_one_cycle") as mock_run_cycle, patch(
-            "agent.metrics.SPECTRAL_RHO"
-        ) as mock_rho, patch("agent.metrics.ENERGY_RATE") as mock_energy:
+        with (
+            patch("agent.core.governor.run_one_cycle") as mock_run_cycle,
+            patch("agent.metrics.SPECTRAL_RHO") as mock_rho,
+            patch("agent.metrics.ENERGY_RATE") as mock_energy,
+        ):
             # Mock the governor to return True
             mock_run_cycle.return_value = True
 
@@ -70,9 +76,11 @@ class TestRaftComputation:
     def test_raft_computation_failure_with_metrics(self):
         """Test RAFT computation when governor fails but metrics are available."""
         # Mock the governor and metrics modules
-        with patch("agent.core.governor.run_one_cycle") as mock_run_cycle, patch(
-            "agent.metrics.SPECTRAL_RHO"
-        ) as mock_rho, patch("agent.metrics.ENERGY_RATE") as mock_energy:
+        with (
+            patch("agent.core.governor.run_one_cycle") as mock_run_cycle,
+            patch("agent.metrics.SPECTRAL_RHO") as mock_rho,
+            patch("agent.metrics.ENERGY_RATE") as mock_energy,
+        ):
             # Mock the governor to return False
             mock_run_cycle.return_value = False
 
@@ -90,9 +98,11 @@ class TestRaftComputation:
     def test_raft_computation_metrics_unavailable(self):
         """Test RAFT computation when metrics are not available."""
         # Mock the governor and metrics modules
-        with patch("agent.core.governor.run_one_cycle") as mock_run_cycle, patch(
-            "agent.metrics.SPECTRAL_RHO"
-        ) as mock_rho, patch("agent.metrics.ENERGY_RATE") as mock_energy:
+        with (
+            patch("agent.core.governor.run_one_cycle") as mock_run_cycle,
+            patch("agent.metrics.SPECTRAL_RHO") as mock_rho,
+            patch("agent.metrics.ENERGY_RATE") as mock_energy,
+        ):
             # Mock the governor to return True
             mock_run_cycle.return_value = True
 

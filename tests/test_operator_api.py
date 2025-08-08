@@ -20,8 +20,7 @@ import pytest_asyncio
 import torch
 from httpx import ASGITransport, AsyncClient
 
-from agent.core.config_store import (Config, get_config, load_config,
-                                     update_config)
+from agent.core.config_store import Config, get_config, load_config, update_config
 from agent.core.operator_api import app
 
 # Test client with auth token

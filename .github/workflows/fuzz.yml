@@ -1,0 +1,129 @@
+name: Nightly Fuzz
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v3
+        with:
+          poetry-version: '1.7.1'
+      - name: Configure Poetry virtualenv
+        run: |
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ./.venv
+          key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+      - name: Install deps
+        run: poetry install --no-interaction --no-root
+
+  generate:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v3
+        with:
+          poetry-version: '1.7.1'
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ./.venv
+          key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+      - name: Install deps
+        run: poetry install --no-interaction --no-root
+      - name: Generate fuzz patch
+        run: poetry run python scripts/fuzz_diff_generator.py --seed ${{ github.run_id }}
+      - name: Upload fuzz.patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-patch
+          path: fuzz.patch
+
+  test:
+    needs: generate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v3
+        with:
+          poetry-version: '1.7.1'
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ./.venv
+          key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+      - name: Install deps
+        run: poetry install --no-interaction --no-root
+      - name: Download fuzz.patch
+        uses: actions/download-artifact@v4
+        with:
+          name: fuzz-patch
+          path: .
+      - name: Run tests
+        id: run-tests
+        run: |
+          set -o pipefail
+          poetry run pytest -q tests/test_fuzz_runner.py 2>&1 | tee pytest.out
+        continue-on-error: true
+      - name: Upload pytest output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-output
+          path: pytest.out
+      - name: Report failure to GitHub Issue
+        if: steps.run-tests.outcome != 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          tail -n 200 pytest.out > tail.out || true
+          title="Nightly fuzz failed (run ${{ github.run_id }})"
+          body=$(printf "Run: %s\n\nLast 200 lines of output:\n\n%s" "$RUN_URL" "$(cat tail.out)")
+          # Try to create a new issue; if it exists, find and comment
+          if gh issue create --title "$title" --body "$body" >/dev/null 2>&1; then
+            echo "Issue created"
+          else
+            # find existing issue number by exact title using gh's jq filter
+            num=$(gh issue list --state open --search "$title" --json number,title --jq '.[] | select(.title=="'$title'") | .number' | head -n1)
+            if [ -n "$num" ]; then
+              gh issue comment "$num" --body "$body"
+            else
+              # fallback: create with slight variation
+              gh issue create --title "$title (new)" --body "$body"
+            fi
+          fi
+      - name: Fail if tests failed
+        if: steps.run-tests.outcome != 'success'
+        run: |
+          echo "Tests failed"
+          exit 1
+
+

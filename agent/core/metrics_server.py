@@ -7,8 +7,13 @@ from loguru import logger
 from prometheus_client import start_http_server
 
 from agent.core.governor import run_one_cycle
-from agent.metrics import (CYCLE_COUNT, ENERGY_RATE, PROOF_FAILURE,
-                           PROOF_SUCCESS, SPECTRAL_RHO)
+from agent.metrics import (
+    CYCLE_COUNT,
+    ENERGY_RATE,
+    PROOF_FAILURE,
+    PROOF_SUCCESS,
+    SPECTRAL_RHO,
+)
 
 
 def main(port=8002, interval=2):

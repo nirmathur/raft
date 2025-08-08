@@ -11,9 +11,12 @@ import pytest
 
 from agent.core.diff_builder import analyze_diff_context, build_smt_diff
 from agent.core.smt_verifier import verify
-from tests.fuzzlib import (FuzzTest, generate_charter_pattern_injection_tests,
-                           generate_multi_hunk_tests,
-                           generate_signature_mismatch_tests)
+from tests.fuzzlib import (
+    FuzzTest,
+    generate_charter_pattern_injection_tests,
+    generate_multi_hunk_tests,
+    generate_signature_mismatch_tests,
+)
 
 CHARTER_HASH = hashlib.sha256(pathlib.Path("charter.md").read_bytes()).hexdigest()
 

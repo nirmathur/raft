@@ -1,0 +1,13 @@
+services:
+  # skip the compose ollama service entirely
+  ollama:
+    profiles: ["skip"]
+
+  operator:
+    # make sure operator does NOT depend on ollama
+    depends_on:
+      - postgres
+      - redis
+      - chroma
+    environment:
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"

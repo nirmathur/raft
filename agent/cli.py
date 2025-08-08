@@ -9,9 +9,10 @@ from typing import Optional
 import typer
 from loguru import logger
 
-
 # Typer application
-app = typer.Typer(add_completion=False, no_args_is_help=True, help="RAFT command-line interface")
+app = typer.Typer(
+    add_completion=False, no_args_is_help=True, help="RAFT command-line interface"
+)
 
 
 def run_one_cycle() -> bool:
@@ -27,8 +28,9 @@ def _estimate_rho() -> Optional[float]:
     Returns None on failure to avoid raising heavy import errors in CLI context.
     """
     try:
-        from agent.core.governor import _SPECTRAL_MODEL  # type: ignore
         import torch  # Lazy import; heavy deps should be avoided in tests via monkeypatch
+
+        from agent.core.governor import _SPECTRAL_MODEL  # type: ignore
 
         x0 = torch.randn(4, requires_grad=True)
         # Use a small number of iterations for speed in CLI context
@@ -66,12 +68,11 @@ def version_cmd() -> None:
     try:
         try:
             # Python 3.8+
-            from importlib.metadata import PackageNotFoundError, version as _version
+            from importlib.metadata import PackageNotFoundError
+            from importlib.metadata import version as _version
         except Exception:  # pragma: no cover
-            from importlib_metadata import (  # type: ignore
-                PackageNotFoundError,
-                version as _version,
-            )
+            from importlib_metadata import PackageNotFoundError
+            from importlib_metadata import version as _version  # type: ignore
         v = _version("raft")
     except Exception:
         v = "0.0.0"
@@ -93,7 +94,9 @@ def one_cycle_cmd() -> None:
 
 @app.command("run")
 def run_cmd(
-    metrics_port: int = typer.Option(8002, "--metrics-port", help="Prometheus metrics port"),
+    metrics_port: int = typer.Option(
+        8002, "--metrics-port", help="Prometheus metrics port"
+    ),
     interval: float = typer.Option(1.0, "--interval", help="Seconds between cycles"),
     cycles: Optional[int] = typer.Option(
         None, "-n", "--cycles", help="Optional number of cycles before exit"
@@ -107,7 +110,9 @@ def run_cmd(
     should_stop = False
     completed_cycles = 0
 
-    def _handle_signal(signum: int, _frame: object) -> None:  # pragma: no cover - hard to simulate
+    def _handle_signal(
+        signum: int, _frame: object
+    ) -> None:  # pragma: no cover - hard to simulate
         nonlocal should_stop
         logger.info(f"Received signal {signum}, shutting down after current cycle...")
         should_stop = True
@@ -116,7 +121,9 @@ def run_cmd(
     try:
         signal.signal(signal.SIGINT, _handle_signal)
         signal.signal(signal.SIGTERM, _handle_signal)
-    except Exception:  # pragma: no cover - some environments may not allow signal handling
+    except (
+        Exception
+    ):  # pragma: no cover - some environments may not allow signal handling
         pass
 
     try:

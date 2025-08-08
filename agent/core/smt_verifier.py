@@ -24,15 +24,36 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Dict, Tuple, Union
+import os
+from typing import Any, Dict, Optional, Tuple, Union
 
-import redis
+try:  # optional dependency for CI/tests
+    import redis  # type: ignore
+except Exception:  # pragma: no cover
+    redis = None  # type: ignore
 from z3 import Solver, parse_smt2_string, sat, unsat
 
-# ───────────────────────── config ──────────────────────────
-REDIS = redis.Redis(host="localhost", port=6379, decode_responses=True)
+# ───────────────────────── config / cache ──────────────────────────
+# Exposed so tests can patch: agent.core.smt_verifier.REDIS
+REDIS: Optional[Any] = None
 TTL = 60 * 60 * 24  # 24 h
-# ───────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────
+
+
+def _get_redis() -> Optional[Any]:
+    """Return a cached Redis client or None if unavailable."""
+    global REDIS
+    if REDIS is not None:
+        return REDIS
+    if redis is None:
+        return None
+    try:
+        REDIS = redis.Redis.from_url(
+            os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0"), decode_responses=True
+        )
+    except Exception:
+        REDIS = None
+    return REDIS
 
 
 def _cache_key(diff: str, charter_hash: str) -> str:
@@ -88,8 +109,13 @@ def verify(diff: str, charter_hash: str) -> Union[bool, Tuple[bool, Dict[str, An
         - "counterexample": Dict of variable assignments
         - "model_summary": Human-readable description
     """
+    # Quick sanity: extremely malformed input (e.g., unbalanced parentheses)
+    if diff.count("(") != diff.count(")"):
+        raise RuntimeError("SMT parse error: unbalanced parentheses")
+
     key = _cache_key(diff, charter_hash)
-    cached = REDIS.get(key)
+    r = _get_redis()
+    cached = r.get(key) if r is not None else None
 
     if cached is not None:
         if cached == "1":
@@ -97,7 +123,7 @@ def verify(diff: str, charter_hash: str) -> Union[bool, Tuple[bool, Dict[str, An
         else:
             # Try to get cached counterexample
             counterexample_key = f"{key}:counterexample"
-            cached_counterexample = REDIS.get(counterexample_key)
+            cached_counterexample = r.get(counterexample_key) if r is not None else None
             if cached_counterexample:
                 try:
                     counterexample_data = json.loads(cached_counterexample)
@@ -117,26 +143,31 @@ def verify(diff: str, charter_hash: str) -> Union[bool, Tuple[bool, Dict[str, An
     try:
         solver.add(parse_smt2_string(diff))
     except Exception as exc:  # malformed SMT
-        REDIS.setex(key, TTL, "0")
+        if r is not None:
+            r.setex(key, TTL, "0")
         raise RuntimeError(f"SMT parse error: {exc}") from exc
 
     check_result = solver.check()
 
     if check_result == unsat:
         # Proof passes - no counterexample exists
-        REDIS.setex(key, TTL, "1")
+        if r is not None:
+            r.setex(key, TTL, "1")
         return True
     elif check_result == sat:
         # Proof fails - extract counterexample
         counterexample_data = _extract_counterexample(solver)
 
         # Cache both the failure and the counterexample
-        REDIS.setex(key, TTL, "0")
+        if r is not None:
+            r.setex(key, TTL, "0")
         counterexample_key = f"{key}:counterexample"
-        REDIS.setex(counterexample_key, TTL, json.dumps(counterexample_data))
+        if r is not None:
+            r.setex(counterexample_key, TTL, json.dumps(counterexample_data))
 
         return False, counterexample_data
     else:
         # Unknown result (timeout, etc.)
-        REDIS.setex(key, TTL, "0")
+        if r is not None:
+            r.setex(key, TTL, "0")
         return (False, {"counterexample": {}, "model_summary": "UNKNOWN"})

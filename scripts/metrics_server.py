@@ -7,8 +7,14 @@ import random
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from prometheus_client import (CONTENT_TYPE_LATEST, CollectorRegistry, Counter,
-                               Gauge, Histogram, generate_latest)
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 # Create a separate registry for fuzz test metrics
 FUZZ_REGISTRY = CollectorRegistry()

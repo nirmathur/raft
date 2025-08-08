@@ -4,6 +4,7 @@ import json
 from typing import Optional
 
 from click.testing import CliRunner
+from typer.main import get_command
 
 from agent import cli
 
@@ -14,7 +15,9 @@ def test_version_prints_mocked_version(monkeypatch):
             return "9.9.9"
 
     # Patch importlib.metadata.version used inside command
-    monkeypatch.setitem(cli.__dict__, "__name__", cli.__name__)  # ensure module dict available
+    monkeypatch.setitem(
+        cli.__dict__, "__name__", cli.__name__
+    )  # ensure module dict available
 
     # Patch the version function resolution path used in cli.version_cmd
     def fake_version_cmd():
@@ -29,7 +32,9 @@ def test_version_prints_mocked_version(monkeypatch):
     monkeypatch.setattr(im, "version", lambda name: "9.9.9")
 
     runner = CliRunner()
-    result = runner.invoke(cli.app, ["version"])  # call Typer app directly
+    result = runner.invoke(
+        get_command(cli.app), ["version"]
+    )  # convert Typer app to Click command
     assert result.exit_code == 0
     assert result.output.strip() == "9.9.9"
 
@@ -41,7 +46,9 @@ def test_one_cycle_prints_json(monkeypatch):
     monkeypatch.setattr(cli, "_estimate_energy", lambda rho: 1.0)
 
     runner = CliRunner()
-    result = runner.invoke(cli.app, ["one-cycle"])  # call Typer app directly
+    result = runner.invoke(
+        get_command(cli.app), ["one-cycle"]
+    )  # convert Typer app to Click command
     assert result.exit_code == 0
 
     data = json.loads(result.output.strip())
@@ -64,6 +71,6 @@ def test_run_cycles_count(monkeypatch):
 
     runner = CliRunner()
     # interval 0 to be fast; -n 2 should run exactly twice
-    result = runner.invoke(cli.app, ["run", "-n", "2", "--interval", "0"])  # type: ignore[list-item]
+    result = runner.invoke(get_command(cli.app), ["run", "-n", "2", "--interval", "0"])  # type: ignore[list-item]
     assert result.exit_code == 0
     assert calls["count"] == 2
