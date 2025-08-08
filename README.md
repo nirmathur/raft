@@ -50,7 +50,7 @@ The system uses the following ports:
 
 ```bash
 cd docker
-docker-compose up -d
+docker compose up -d
 ```
 
 The operator API will be available at `http://localhost:8001` with the token set in the environment.
@@ -67,6 +67,18 @@ poetry run pytest
 # Run governor
 poetry run python -m agent.core.governor
 ```
+
+### CLI
+
+Use the lightweight CLI for common tasks:
+
+```bash
+poetry run raft version
+poetry run raft one-cycle
+poetry run raft run --metrics-port 8002 --interval 0.5
+```
+
+Metrics are exposed on the selected `--metrics-port`.
 
 ### Baseline vs RAFT Harness
 
