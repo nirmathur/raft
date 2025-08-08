@@ -26,6 +26,8 @@ from pydantic import BaseModel, Field
 from agent.core.config_store import ConfigValidator, get_config, update_config
 from agent.core.escape_hatches import is_paused, load_state, request_kill, request_pause
 from agent.core.event_log import record
+from agent.core.plan_models import Plan
+from agent.core.plan_smt import verify_plan
 
 TOKEN = os.getenv("OPERATOR_TOKEN", "devtoken")  # set in docker-compose.yml
 
@@ -168,3 +170,17 @@ async def reload_model(request: Request):
     except Exception as e:
         logger.error(f"Model reload failed: {e}")
         raise HTTPException(500, f"Model reload failed: {e}")
+
+
+@app.post("/prove")
+async def prove_plan(request: Request, body: Plan):
+    """Prove plan safety using SMT.
+
+    Returns {"passed": bool, "counterexample": dict | None}
+    """
+    _auth(request)
+    try:
+        passed, counterexample = verify_plan(body)
+        return JSONResponse({"passed": passed, "counterexample": counterexample})
+    except Exception as e:
+        raise HTTPException(500, f"proof failed: {e}")
