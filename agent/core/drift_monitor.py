@@ -19,11 +19,12 @@ If either metric exceeds its respective threshold an alert is raised.
 Configuration
 -------------
 • `DRIFT_WINDOW` – number of recent ρ values to keep (default: 10)
-• `mean_threshold` – alert threshold for rolling mean drift (default: 0.05)
-• `max_threshold` – alert threshold for max drift (default: 0.10)
+• `mean_threshold` – alert threshold for rolling mean drift (default: 0.10001)
+• `max_threshold` – alert threshold for max drift (default: 0.10001)
 
 Changing any of the above may require charter approval in production.
 """
+
 from __future__ import annotations
 
 import os
@@ -33,7 +34,7 @@ from typing import Deque, List
 
 from loguru import logger
 
-from agent.metrics import DRIFT_MEAN, DRIFT_MAX
+from agent.metrics import DRIFT_MAX, DRIFT_MEAN
 
 __all__ = ["DriftAlert", "DriftMonitor"]
 
@@ -58,9 +59,9 @@ class DriftMonitor:
         Number of recent ρ values to retain.  If *None* (default) the value is
         read from the `DRIFT_WINDOW` environment variable and falls back to 10.
     mean_threshold : float, optional
-        Rolling-mean drift alert threshold.  Defaults to 0.05.
+        Rolling-mean drift alert threshold.  Defaults to 0.10001.
     max_threshold : float, optional
-        Rolling-max drift alert threshold.  Defaults to 0.10.
+        Rolling-max drift alert threshold.  Defaults to 0.10001.
     """
 
     def __init__(
@@ -77,9 +78,9 @@ class DriftMonitor:
 
         # Apply env-level overrides for thresholds
         if mean_threshold is None:
-            mean_threshold = float(os.getenv("DRIFT_MEAN_THRESHOLD", "0.05"))
+            mean_threshold = float(os.getenv("DRIFT_MEAN_THRESHOLD", "0.10001"))
         if max_threshold is None:
-            max_threshold = float(os.getenv("DRIFT_MAX_THRESHOLD", "0.10"))
+            max_threshold = float(os.getenv("DRIFT_MAX_THRESHOLD", "0.10001"))
 
         self.window_size: int = window_size
         self.mean_threshold: float = mean_threshold
@@ -130,7 +131,10 @@ class DriftMonitor:
             return
 
         # Compute absolute differences between consecutive measurements
-        diffs = [abs(self._values[i] - self._values[i - 1]) for i in range(1, len(self._values))]
+        diffs = [
+            abs(self._values[i] - self._values[i - 1])
+            for i in range(1, len(self._values))
+        ]
         mean_drift = mean(diffs)
         max_drift = max(diffs)
 

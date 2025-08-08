@@ -38,7 +38,13 @@ def test_charter_injected_pattern_is_caught():
         actual_result = verify(smt_diff, CHARTER_HASH)
 
         # Assert that the pattern was caught (should return False for unsafe patterns)
-        assert actual_result == test.expected_result, (
+        # Handle both tuple and boolean return formats
+        if isinstance(actual_result, tuple):
+            actual_bool = actual_result[0]
+        else:
+            actual_bool = actual_result
+
+        assert actual_bool == test.expected_result, (
             f"Test {test.name} failed: expected {test.expected_result}, got {actual_result}. "
             f"Pattern: {test.metadata.get('pattern', 'unknown')}, "
             f"Injection type: {test.metadata.get('injection_type', 'unknown')}"
@@ -71,7 +77,13 @@ def test_arg_name_change_triggers_assert_false():
         actual_result = verify(smt_diff, CHARTER_HASH)
 
         # Assert that signature mismatch was detected (should return False)
-        assert actual_result == test.expected_result, (
+        # Handle both tuple and boolean return formats
+        if isinstance(actual_result, tuple):
+            actual_bool = actual_result[0]
+        else:
+            actual_bool = actual_result
+
+        assert actual_bool == test.expected_result, (
             f"Test {test.name} failed: expected {test.expected_result}, got {actual_result}. "
             f"Old arg: {test.metadata.get('old_arg', 'unknown')}, "
             f"New arg: {test.metadata.get('new_arg', 'unknown')}"
@@ -111,7 +123,13 @@ def test_multi_hunk_diff_preserves_correct_line_numbers():
         actual_result = verify(smt_diff, CHARTER_HASH)
 
         # Assert that the result matches expectation
-        assert actual_result == test.expected_result, (
+        # Handle both tuple and boolean return formats
+        if isinstance(actual_result, tuple):
+            actual_bool = actual_result[0]
+        else:
+            actual_bool = actual_result
+
+        assert actual_bool == test.expected_result, (
             f"Test {test.name} failed: expected {test.expected_result}, got {actual_result}. "
             f"Hunks: {test.metadata.get('hunks', 'unknown')}"
         )

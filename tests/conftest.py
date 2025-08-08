@@ -38,6 +38,12 @@ def _setup_test_environment():
             # Reset configuration to defaults (using internal API to avoid HTTP calls)
             update_config({"rho_max": 0.9, "energy_multiplier": 2.0})
 
+            # Reset drift monitor state to avoid cross-test contamination
+            from agent.core.governor import _DRIFT_MONITOR
+
+            if _DRIFT_MONITOR is not None:
+                _DRIFT_MONITOR.reset()
+
         except Exception:
             # If reset fails, don't break other tests
             pass

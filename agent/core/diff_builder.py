@@ -8,8 +8,8 @@ This module implements two key invariants:
 2. Goal preservation: renamed functions must preserve their signatures
 
 The SMT formula encodes these as:
-    (assert true)   → safe diff
-    (assert false)  → UNSAT (proof gate fails)
+    (assert false)  → UNSAT → safe diff (proof succeeds)
+    (assert true)   → SAT → unsafe diff (proof fails)
 """
 
 from __future__ import annotations
@@ -371,7 +371,7 @@ class SMTDiffBuilder:
     def build_smt_formula(self, diff_text: str) -> str:
         """Build complete SMT-LIB2 formula from diff text."""
         if not diff_text.strip():
-            return "(assert true)"
+            return "(assert false)"
 
         diff_ast = self.parser.parse_unified_diff(diff_text)
 
@@ -379,12 +379,12 @@ class SMTDiffBuilder:
         forbidden_violations = self._find_forbidden_violations(diff_ast)
         goal_violations = self._find_goal_preservation_violations(diff_ast)
 
-        # Fast path: if we have violations, return false immediately
+        # Fast path: if we have violations, return true (SAT - unsafe)
         # This is more efficient than building Z3 solver for simple cases
         if forbidden_violations or goal_violations:
-            return "(assert false)"
+            return "(assert true)"
 
-        return "(assert true)"
+        return "(assert false)"
 
     def _find_forbidden_violations(
         self, diff_ast: DiffAST
@@ -564,7 +564,7 @@ def analyze_diff_context(diff_text: str) -> Dict[str, any]:
             "risk_score": 0.0,
             "forbidden_violations": [],
             "function_renames": {},
-            "smt_result": "(assert true)",
+            "smt_result": "(assert false)",
         }
 
     diff_ast = parse_diff_to_ast(diff_text)
@@ -606,7 +606,7 @@ def extract_forbidden_from_charter(charter_clauses: Dict[str, str]) -> List[str]
 def build_advanced_smt(diff_text: str, forbidden_patterns: List[str]) -> str:
     """Build SMT formula with custom forbidden patterns."""
     if not diff_text.strip():
-        return "(assert true)"
+        return "(assert false)"
 
     # Compile custom patterns
     compiled_patterns = [re.compile(pattern) for pattern in forbidden_patterns]

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Dict, Any, Union, Tuple
+from typing import Any, Dict, Tuple, Union
 
 import redis
 from z3 import Solver, parse_smt2_string, sat, unsat
@@ -42,19 +42,19 @@ def _cache_key(diff: str, charter_hash: str) -> str:
 def _extract_counterexample(solver: Solver) -> Dict[str, Any]:
     """
     Extract counterexample from Z3 model when solver result is SAT.
-    
+
     Returns:
         Dict containing variable assignments and human-readable summary
     """
     model = solver.model()
     counterexample = {}
-    
+
     # Extract all variable assignments from the model
     for decl in model.decls():
         var_name = decl.name()
         var_value = str(model[decl])
         counterexample[var_name] = var_value
-    
+
     # Create a human-readable summary
     if counterexample:
         summary = f"Found counterexample with {len(counterexample)} variable(s): "
@@ -63,11 +63,8 @@ def _extract_counterexample(solver: Solver) -> Dict[str, Any]:
             summary += f" (and {len(counterexample) - 3} more)"
     else:
         summary = "SAT result but no variable assignments found"
-    
-    return {
-        "counterexample": counterexample,
-        "model_summary": summary
-    }
+
+    return {"counterexample": counterexample, "model_summary": summary}
 
 
 def verify(diff: str, charter_hash: str) -> Union[bool, Tuple[bool, Dict[str, Any]]]:
@@ -86,14 +83,14 @@ def verify(diff: str, charter_hash: str) -> Union[bool, Tuple[bool, Dict[str, An
     Union[bool, Tuple[bool, Dict[str, Any]]]
         - True: proof passes (UNSAT - no counterexample exists)
         - (False, counterexample_dict): proof fails (SAT - counterexample found)
-        
+
     The counterexample_dict contains:
         - "counterexample": Dict of variable assignments
         - "model_summary": Human-readable description
     """
     key = _cache_key(diff, charter_hash)
     cached = REDIS.get(key)
-    
+
     if cached is not None:
         if cached == "1":
             return True
@@ -108,7 +105,13 @@ def verify(diff: str, charter_hash: str) -> Union[bool, Tuple[bool, Dict[str, An
                 except json.JSONDecodeError:
                     pass
             # Fallback if counterexample cache is corrupted
-            return False
+            return (
+                False,
+                {
+                    "counterexample": {},
+                    "model_summary": "Cached failure without counterexample",
+                },
+            )
 
     solver = Solver()
     try:
@@ -118,7 +121,7 @@ def verify(diff: str, charter_hash: str) -> Union[bool, Tuple[bool, Dict[str, An
         raise RuntimeError(f"SMT parse error: {exc}") from exc
 
     check_result = solver.check()
-    
+
     if check_result == unsat:
         # Proof passes - no counterexample exists
         REDIS.setex(key, TTL, "1")
@@ -126,14 +129,14 @@ def verify(diff: str, charter_hash: str) -> Union[bool, Tuple[bool, Dict[str, An
     elif check_result == sat:
         # Proof fails - extract counterexample
         counterexample_data = _extract_counterexample(solver)
-        
+
         # Cache both the failure and the counterexample
         REDIS.setex(key, TTL, "0")
         counterexample_key = f"{key}:counterexample"
         REDIS.setex(counterexample_key, TTL, json.dumps(counterexample_data))
-        
+
         return False, counterexample_data
     else:
         # Unknown result (timeout, etc.)
         REDIS.setex(key, TTL, "0")
-        return False
+        return (False, {"counterexample": {}, "model_summary": "UNKNOWN"})

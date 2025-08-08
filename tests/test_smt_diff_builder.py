@@ -87,7 +87,7 @@ class TestSMTDiffBuilder:
 +    print("Hello world")
 """
         result = build_smt_diff(safe_diff)
-        assert result == "(assert true)"
+        assert result == "(assert false)"
 
     def test_unsafe_diff_with_exec_returns_assert_false(self):
         """Test that diff with exec() returns (assert false)."""
@@ -98,7 +98,7 @@ class TestSMTDiffBuilder:
 +    exec('malicious_code')
 """
         result = build_smt_diff(unsafe_diff)
-        assert result == "(assert false)"
+        assert result == "(assert true)"
 
     def test_unsafe_diff_with_subprocess_returns_assert_false(self):
         """Test that diff with subprocess returns (assert false)."""
@@ -109,7 +109,7 @@ class TestSMTDiffBuilder:
  def hello():
 """
         result = build_smt_diff(unsafe_diff)
-        assert result == "(assert false)"
+        assert result == "(assert true)"
 
     def test_unsafe_diff_with_eval_returns_assert_false(self):
         """Test that diff with eval() returns (assert false)."""
@@ -120,7 +120,7 @@ class TestSMTDiffBuilder:
      pass
 """
         result = build_smt_diff(unsafe_diff)
-        assert result == "(assert false)"
+        assert result == "(assert true)"
 
     def test_function_rename_with_same_signature_is_safe(self):
         """Test that function rename with same signature is considered safe."""
@@ -131,7 +131,7 @@ class TestSMTDiffBuilder:
      return x + y
 """
         result = build_smt_diff(rename_diff)
-        assert result == "(assert true)"
+        assert result == "(assert false)"
 
     def test_function_rename_with_different_signature_is_unsafe(self):
         """Test that function rename with different signature is considered unsafe."""
@@ -143,12 +143,12 @@ class TestSMTDiffBuilder:
 """
         result = build_smt_diff(rename_diff)
         # Now properly detects signature mismatches
-        assert result == "(assert false)"
+        assert result == "(assert true)"
 
     def test_empty_diff_returns_assert_true(self):
-        """Test that empty diff returns (assert true)."""
+        """Test that empty diff returns (assert false) - safe."""
         result = build_smt_diff("")
-        assert result == "(assert true)"
+        assert result == "(assert false)"
 
     def test_diff_with_multiple_forbidden_patterns(self):
         """Test diff with multiple forbidden patterns."""
@@ -160,7 +160,7 @@ class TestSMTDiffBuilder:
      pass
 """
         result = build_smt_diff(unsafe_diff)
-        assert result == "(assert false)"
+        assert result == "(assert true)"
 
 
 class TestDiffAnalysis:
@@ -179,7 +179,7 @@ class TestDiffAnalysis:
         assert context["file_count"] == 1
         assert context["has_deletions"] is False
         assert context["added_lines"] == 1
-        assert context["smt_result"] == "(assert true)"
+        assert context["smt_result"] == "(assert false)"
         assert len(context["forbidden_violations"]) == 0
         assert context["risk_score"] <= 0.2  # Should be low risk
 
@@ -194,7 +194,7 @@ class TestDiffAnalysis:
         context = analyze_diff_context(unsafe_diff)
 
         assert context["file_count"] == 1
-        assert context["smt_result"] == "(assert false)"
+        assert context["smt_result"] == "(assert true)"
         assert len(context["forbidden_violations"]) > 0
         assert context["forbidden_violations"][0]["pattern"] == r"\bexec\b"
         assert context["risk_score"] > 0.8  # Should be high risk
@@ -262,7 +262,7 @@ class TestAdvancedSMTFeatures:
         custom_patterns = [r"\bcustom_dangerous_function\b"]
 
         result = build_advanced_smt(diff_text, custom_patterns)
-        assert result == "(assert false)"
+        assert result == "(assert true)"
 
     def test_build_advanced_smt_safe_with_custom_patterns(self):
         """Test safe diff with custom patterns."""
@@ -270,7 +270,7 @@ class TestAdvancedSMTFeatures:
         custom_patterns = [r"\bdangerous_function\b"]
 
         result = build_advanced_smt(diff_text, custom_patterns)
-        assert result == "(assert true)"
+        assert result == "(assert false)"
 
     def test_extract_forbidden_from_charter(self):
         """Test extracting forbidden patterns from charter."""
@@ -291,7 +291,7 @@ class TestEdgeCases:
 
         # Should not crash and should default to safe
         result = build_smt_diff(malformed_diff)
-        assert result == "(assert true)"
+        assert result == "(assert false)"
 
     def test_very_large_diff(self):
         """Test handling of large diffs."""
@@ -301,7 +301,7 @@ class TestEdgeCases:
             large_diff += f"+ line_{i} = {i}\n"
 
         result = build_smt_diff(large_diff)
-        assert result == "(assert true)"  # Should handle large diffs
+        assert result == "(assert false)"  # Should handle large diffs
 
     def test_binary_file_diff(self):
         """Test handling of binary file diffs."""
@@ -321,22 +321,22 @@ Binary files a/image.png and b/image.png differ
 +    print("🚀 Unicode test")
 """
         result = build_smt_diff(unicode_diff)
-        assert result == "(assert true)"
+        assert result == "(assert false)"
 
 
 # Legacy test compatibility
 def test_build_smt_diff_safe():
-    """Legacy test: safe diff returns (assert true)."""
+    """Legacy test: safe diff returns (assert false)."""
     safe_diff = "+ def hello(): pass"
     result = build_smt_diff(safe_diff)
-    assert result == "(assert true)"
+    assert result == "(assert false)"
 
 
 def test_build_smt_diff_unsafe():
-    """Legacy test: unsafe diff returns (assert false)."""
+    """Legacy test: unsafe diff returns (assert true)."""
     unsafe_diff = "+ eval('x')"
     result = build_smt_diff(unsafe_diff)
-    assert result == "(assert false)"
+    assert result == "(assert true)"
 
 
 def test_risk_score_bounds():
@@ -376,7 +376,7 @@ def test_forbidden_charter_injection():
      pass
 """
     result = build_smt_with_charter(diff_text, charter_clauses)
-    assert result == "(assert false)"
+    assert result == "(assert true)"
 
 
 def test_function_rename_signature_mismatch():
@@ -388,8 +388,8 @@ def test_function_rename_signature_mismatch():
      return a
 """
     result = build_smt_diff(diff_text)
-    # Should detect signature mismatch and return false
-    assert result == "(assert false)"
+    # Should detect signature mismatch and return true (unsafe)
+    assert result == "(assert true)"
 
 
 def test_location_metadata_preserved():
@@ -552,7 +552,7 @@ def test_signature_mismatch_returns_false():
 +def calculate_sum(a, b):
      pass
 """
-    assert build_smt_diff(diff) == "(assert false)"
+    assert build_smt_diff(diff) == "(assert true)"
 
 
 def test_line_number_metadata():
@@ -580,4 +580,4 @@ def test_forbidden_patterns(pattern):
         diff = f"+ {pattern_name}('test')"
 
     result = build_smt_diff(diff)
-    assert result == "(assert false)"
+    assert result == "(assert true)"
