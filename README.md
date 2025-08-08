@@ -68,6 +68,54 @@ poetry run pytest
 poetry run python -m agent.core.governor
 ```
 
+### Baseline vs RAFT Harness
+
+RAFT includes a performance/accuracy comparison harness to benchmark the system against a baseline computation. This allows you to measure the overhead and effectiveness of RAFT's governance mechanisms.
+
+#### Usage
+
+```bash
+# Run baseline mode (3 runs by default)
+poetry run python scripts/compare_baseline.py --mode baseline --runs 3
+
+# Run RAFT mode with custom parameters
+poetry run python scripts/compare_baseline.py --mode raft --runs 5 --seed 42
+
+# Specify custom output file
+poetry run python scripts/compare_baseline.py --mode baseline --out results.csv
+```
+
+#### Output Format
+
+The harness generates CSV files with the following columns:
+- `run`: Run number (1-based)
+- `mode`: Either "baseline" or "raft"
+- `timestamp`: ISO 8601 timestamp
+- `success`: Boolean indicating success/failure
+- `latency`: Execution time in seconds
+- `rho`: Spectral radius (empty for baseline)
+- `energy`: Energy consumption in Joules (empty for baseline)
+
+#### Baseline Mode
+
+Baseline mode computes `f(x) = x + ε` where `x = 1.0` and `ε ~ N(0, 0.01)`. This provides a simple, deterministic baseline for comparison.
+
+#### RAFT Mode
+
+RAFT mode runs the full governor cycle and extracts:
+- Success/failure from `run_one_cycle()` return value
+- Spectral radius (ρ) from metrics
+- Energy consumption from metrics
+
+The harness gracefully handles missing metrics by leaving the corresponding fields empty.
+
+#### Testing
+
+```bash
+# Run comparison harness tests
+poetry run pytest tests/test_compare_baseline.py -v
+```
+
 
 ## SMT-LIB2 Diff Analysis
 
