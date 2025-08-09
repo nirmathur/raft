@@ -28,6 +28,12 @@ from agent.core.escape_hatches import is_paused, load_state, request_kill, reque
 from agent.core.event_log import record
 from agent.core.plan_models import Plan
 from agent.core.plan_smt import verify_plan
+from pydantic import BaseModel as _BaseModel
+
+
+class ProveResp(_BaseModel):
+    passed: bool
+    counterexample: dict | None
 
 TOKEN = os.getenv("OPERATOR_TOKEN", "devtoken")  # set in docker-compose.yml
 
@@ -172,7 +178,7 @@ async def reload_model(request: Request):
         raise HTTPException(500, f"Model reload failed: {e}")
 
 
-@app.post("/prove")
+@app.post("/prove", response_model=ProveResp)
 async def prove_plan(request: Request, body: Plan):
     """Prove plan safety using SMT.
 
@@ -183,4 +189,4 @@ async def prove_plan(request: Request, body: Plan):
         passed, counterexample = verify_plan(body)
         return JSONResponse({"passed": passed, "counterexample": counterexample})
     except Exception as e:
-        raise HTTPException(500, f"proof failed: {e}")
+        raise HTTPException(500, detail={"code": "PROOF_FAILED", "message": str(e)})

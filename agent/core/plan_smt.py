@@ -16,7 +16,6 @@ from z3 import (
     Length,
     Or,
     PrefixOf,
-    Replace,
     Solver,
     StringVal,
     SubString,
@@ -107,6 +106,8 @@ def verify_plan(plan: Plan) -> Tuple[bool, Optional[Dict[str, Any]]]:
     if r is not None:
         try:
             cached = r.get(key)
+            if isinstance(cached, bytes):
+                cached = cached.decode("utf-8", "ignore")
         except Exception:
             cached = None
 
@@ -117,6 +118,8 @@ def verify_plan(plan: Plan) -> Tuple[bool, Optional[Dict[str, Any]]]:
             ckey = f"{key}:counterexample"
             try:
                 blob = r.get(ckey) if r is not None else None
+                if isinstance(blob, bytes):
+                    blob = blob.decode("utf-8", "ignore")
                 if blob:
                     return False, json.loads(blob)
             except Exception:
@@ -140,12 +143,21 @@ def verify_plan(plan: Plan) -> Tuple[bool, Optional[Dict[str, Any]]]:
         fetch_valid = And(scheme_ok, has_host_dot)
         fetch_violation = And(op == StringVal("Fetch"), Not(fetch_valid))
 
-        # WriteFile(path)
+        # WriteFile(path) — keep checks on raw string without Replace
         path = StringVal(getattr(step, "path", ""))
-        path_norm = Replace(path, StringVal("\\"), StringVal("/"))
-        is_relative = And(Not(PrefixOf(StringVal("/"), path_norm)), Not(Contains(path_norm, StringVal(":/"))))
-        no_dotdot = Not(Contains(path_norm, StringVal("..")))
-        starts_artifacts = PrefixOf(StringVal("artifacts/"), path_norm)
+        starts_artifacts = Or(
+            PrefixOf(StringVal("artifacts/"), path),
+            PrefixOf(StringVal("artifacts\\"), path),
+        )
+        is_relative = And(
+            Not(PrefixOf(StringVal("/"), path)),
+            Not(Contains(path, StringVal(":/"))),
+            Not(Contains(path, StringVal(":\\"))),
+        )
+        no_dotdot = And(
+            Not(Contains(path, StringVal(".."))),
+            Not(Contains(path, StringVal("..\\"))),
+        )
         wf_valid = And(is_relative, no_dotdot, starts_artifacts)
         wf_violation = And(op == StringVal("WriteFile"), Not(wf_valid))
 
