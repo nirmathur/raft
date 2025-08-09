@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Enhanced Fuzz Harness v2 for RAFT.
-Exercises charter pattern injection, signature-mismatch detection, 
+Exercises charter pattern injection, signature-mismatch detection,
 multi-hunk line tracking, and cache fall-back paths.
 
 Usage:

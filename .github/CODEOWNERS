@@ -1,0 +1,13 @@
+# Require human review for critical safety code paths
+
+# Default owners (fallback) — keep empty or set core maintainers
+*            @nirmathur
+
+# Critical files
+agent/core/diff_builder.py    @nirmathur
+agent/core/energy_guard.py    @nirmathur
+agent/core/governor/*         @nirmathur
+
+# If plan_smt.py is added later, protect it too
+agent/core/plan_smt.py        @nirmathur
+
