@@ -18,6 +18,15 @@ from pydantic.config import ConfigDict
 
 ARTIFACTS_ROOT: str = "artifacts"
 
+__all__ = [
+    "ARTIFACTS_ROOT",
+    "Fetch",
+    "WriteFile",
+    "Run",
+    "Step",
+    "Plan",
+]
+
 
 def _normalize_and_validate_artifact_path(value: str, *, field_name: str) -> str:
     """Normalize a path and ensure it is strictly contained under artifacts/.
@@ -27,11 +36,16 @@ def _normalize_and_validate_artifact_path(value: str, *, field_name: str) -> str
     - Use PurePosixPath for normalization.
     - Reject absolute paths and empty / '.' paths.
     - Path must start with 'artifacts/' and be strictly inside it (at least one
-      subcomponent), and must not contain any '..' traversal segments.
+      subcomponent), must not contain any '..' traversal segments, and must not
+      be a directory-looking target ending with '/'.
     - Return the normalized posix string.
     """
     # Replace Windows-style backslashes to avoid escape oddities
     value = value.replace("\\", "/").strip()
+
+    # Forbid directory-looking paths that end with '/'
+    if value.endswith("/"):
+        raise ValueError(f"{field_name} must refer to a file and must not end with '/'")
 
     path = PurePosixPath(value)
 
@@ -70,7 +84,8 @@ class Fetch(_BaseModel):
     Attributes:
         op: Discriminator literal "Fetch".
         url: HTTP/HTTPS URL.
-        save_as: Optional relative path under artifacts/ where to save; if not
+        save_as: Optional relative path under artifacts/ where to save; uses the
+            same normalization and containment rules as WriteFile.path. If not
             provided, the content is intended for ephemeral use by later steps.
     """
 

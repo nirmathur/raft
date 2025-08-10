@@ -70,3 +70,41 @@ def test_models_validation_only():
     with pytest.raises(ValidationError):
         # Negative tokens
         Plan(name="x", tokens=-1, steps=[Run(op="Run", target="governor.one_cycle")])
+
+    # Additional Fetch URL validations
+    with pytest.raises(ValidationError):
+        # Missing host (netloc empty)
+        Fetch(op="Fetch", url="https:///path")
+
+    # Valid: IP host is allowed
+    plan3 = Plan(
+        name="fetch ip",
+        steps=[Fetch(op="Fetch", url="https://127.0.0.1", save_as=f"{ARTIFACTS_ROOT}/web/file.txt")],
+    )
+    assert plan3.steps[0].save_as == f"{ARTIFACTS_ROOT}/web/file.txt"
+
+    # Invalid: save_as missing artifacts/
+    with pytest.raises(ValidationError):
+        Fetch(op="Fetch", url="https://example.com", save_as="notes/a.txt")
+
+    # Invalid: save_as traversal
+    with pytest.raises(ValidationError):
+        Fetch(op="Fetch", url="https://example.com", save_as=f"{ARTIFACTS_ROOT}/../notes/a.txt")
+
+    # WriteFile normalization tests
+    wf_backslashes = WriteFile(op="WriteFile", path=f"{ARTIFACTS_ROOT}\\notes\\a.txt", content="x")
+    assert wf_backslashes.path == f"{ARTIFACTS_ROOT}/notes/a.txt"
+
+    wf_doubles = WriteFile(op="WriteFile", path=f"{ARTIFACTS_ROOT}//notes//a.txt", content="x")
+    assert wf_doubles.path == f"{ARTIFACTS_ROOT}/notes/a.txt"
+
+    # Plan name trimming
+    with pytest.raises(ValidationError):
+        Plan(name=" ", steps=[Run(op="Run", target="governor.one_cycle")])
+
+    plan_trim = Plan(name=" ok ", steps=[Run(op="Run", target="governor.one_cycle")])
+    assert plan_trim.name == "ok"
+
+    # Optional: directory-looking target should be rejected (we chose to forbid)
+    with pytest.raises(ValidationError):
+        WriteFile(op="WriteFile", path=f"{ARTIFACTS_ROOT}/dir/", content="x")
