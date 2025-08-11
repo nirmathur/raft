@@ -108,3 +108,32 @@ def test_models_validation_only():
     # Optional: directory-looking target should be rejected (we chose to forbid)
     with pytest.raises(ValidationError):
         WriteFile(op="WriteFile", path=f"{ARTIFACTS_ROOT}/dir/", content="x")
+
+    # Scheme normalization: uppercase scheme is allowed
+    assert Fetch(op="Fetch", url="HTTP://example.com")
+
+    # Directory-looking save_as should be rejected
+    with pytest.raises(ValidationError):
+        Fetch(op="Fetch", url="https://example.com", save_as=f"{ARTIFACTS_ROOT}/dir/")
+
+    # Dict-based plan creation
+    plan_dict = {
+        "name": "dict plan",
+        "steps": [
+            {"op": "Fetch", "url": "https://example.com", "save_as": f"{ARTIFACTS_ROOT}/web/x.txt"},
+            {"op": "WriteFile", "path": "./artifacts/notes/a.txt", "content": "ok"},
+            {"op": "Run", "target": "governor.one_cycle"},
+        ],
+    }
+    p = Plan(**plan_dict)
+    assert isinstance(p.steps[0], Fetch) and p.steps[1].path == "artifacts/notes/a.txt"
+
+    # Extra fields are rejected
+    with pytest.raises(ValidationError):
+        Run(op="Run", target="governor.one_cycle", junk=1)  # type: ignore
+
+    # Root-only paths are rejected
+    with pytest.raises(ValidationError):
+        WriteFile(op="WriteFile", path="artifacts", content="x")
+    with pytest.raises(ValidationError):
+        WriteFile(op="WriteFile", path="artifacts/.", content="x")

@@ -97,7 +97,8 @@ class Fetch(_BaseModel):
     @classmethod
     def _validate_url(cls, value: str) -> str:
         parsed = urlparse(value)
-        if parsed.scheme not in {"http", "https"}:
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in {"http", "https"}:
             raise ValueError("url scheme must be http or https")
         if not parsed.netloc:
             raise ValueError("url must include a network location (host)")
