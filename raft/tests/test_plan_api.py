@@ -137,3 +137,15 @@ def test_models_validation_only():
         WriteFile(op="WriteFile", path="artifacts", content="x")
     with pytest.raises(ValidationError):
         WriteFile(op="WriteFile", path="artifacts/.", content="x")
+
+    # '.' segment is normalized away
+    wf_dot = WriteFile(op="WriteFile", path=f"{ARTIFACTS_ROOT}/./notes/a.txt", content="x")
+    assert wf_dot.path == f"{ARTIFACTS_ROOT}/notes/a.txt"
+
+    # Leading './' also normalizes (already covered indirectly, but lock it)
+    wf_leading_dot = WriteFile(op="WriteFile", path=f"./{ARTIFACTS_ROOT}/notes/a.txt", content="x")
+    assert wf_leading_dot.path == f"{ARTIFACTS_ROOT}/notes/a.txt"
+
+    # Parent at end should be rejected
+    with pytest.raises(ValidationError):
+        WriteFile(op="WriteFile", path=f"{ARTIFACTS_ROOT}/notes/..", content="x")

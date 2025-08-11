@@ -49,6 +49,10 @@ def _normalize_and_validate_artifact_path(value: str, *, field_name: str) -> str
 
     path = PurePosixPath(value)
 
+    # Strip any '.' segments to keep paths canonical for audit logs
+    if "." in path.parts:
+        path = PurePosixPath(*[p for p in path.parts if p != "."])
+
     # No absolute paths
     if path.is_absolute():
         raise ValueError(f"{field_name} must be a relative path under '{ARTIFACTS_ROOT}/'")
