@@ -6,6 +6,7 @@ for URLs and filesystem paths, without any I/O side effects.
 The DSL is intentionally small for Step 1 and focuses only on modeling and
 validation. Execution, networking, and solvers are out of scope here.
 """
+
 from __future__ import annotations
 
 from pathlib import PurePosixPath
@@ -14,7 +15,6 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic.config import ConfigDict
-
 
 ARTIFACTS_ROOT: str = "artifacts"
 
@@ -55,7 +55,9 @@ def _normalize_and_validate_artifact_path(value: str, *, field_name: str) -> str
 
     # No absolute paths
     if path.is_absolute():
-        raise ValueError(f"{field_name} must be a relative path under '{ARTIFACTS_ROOT}/'")
+        raise ValueError(
+            f"{field_name} must be a relative path under '{ARTIFACTS_ROOT}/'"
+        )
 
     # No empty or current directory
     if str(path) in {"", "."}:
@@ -79,7 +81,9 @@ def _normalize_and_validate_artifact_path(value: str, *, field_name: str) -> str
 class _BaseModel(BaseModel):
     """Project-wide base model with strict-ish defaults: reject unknown fields."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="forbid", str_strip_whitespace=True
+    )
 
 
 class Fetch(_BaseModel):

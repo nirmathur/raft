@@ -1,13 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from agent.core.plan_models import (
-    ARTIFACTS_ROOT,
-    Fetch,
-    Plan,
-    Run,
-    WriteFile,
-)
+from agent.core.plan_models import ARTIFACTS_ROOT, Fetch, Plan, Run, WriteFile
 
 
 def test_models_validation_only():
@@ -49,7 +43,9 @@ def test_models_validation_only():
 
     with pytest.raises(ValidationError):
         # Traversal rejected
-        WriteFile(op="WriteFile", path=f"{ARTIFACTS_ROOT}/../../etc/shadow", content="x")
+        WriteFile(
+            op="WriteFile", path=f"{ARTIFACTS_ROOT}/../../etc/shadow", content="x"
+        )
 
     with pytest.raises(ValidationError):
         # Missing artifacts/ prefix
@@ -79,7 +75,13 @@ def test_models_validation_only():
     # Valid: IP host is allowed
     plan3 = Plan(
         name="fetch ip",
-        steps=[Fetch(op="Fetch", url="https://127.0.0.1", save_as=f"{ARTIFACTS_ROOT}/web/file.txt")],
+        steps=[
+            Fetch(
+                op="Fetch",
+                url="https://127.0.0.1",
+                save_as=f"{ARTIFACTS_ROOT}/web/file.txt",
+            )
+        ],
     )
     assert plan3.steps[0].save_as == f"{ARTIFACTS_ROOT}/web/file.txt"
 
@@ -89,13 +91,21 @@ def test_models_validation_only():
 
     # Invalid: save_as traversal
     with pytest.raises(ValidationError):
-        Fetch(op="Fetch", url="https://example.com", save_as=f"{ARTIFACTS_ROOT}/../notes/a.txt")
+        Fetch(
+            op="Fetch",
+            url="https://example.com",
+            save_as=f"{ARTIFACTS_ROOT}/../notes/a.txt",
+        )
 
     # WriteFile normalization tests
-    wf_backslashes = WriteFile(op="WriteFile", path=f"{ARTIFACTS_ROOT}\\notes\\a.txt", content="x")
+    wf_backslashes = WriteFile(
+        op="WriteFile", path=f"{ARTIFACTS_ROOT}\\notes\\a.txt", content="x"
+    )
     assert wf_backslashes.path == f"{ARTIFACTS_ROOT}/notes/a.txt"
 
-    wf_doubles = WriteFile(op="WriteFile", path=f"{ARTIFACTS_ROOT}//notes//a.txt", content="x")
+    wf_doubles = WriteFile(
+        op="WriteFile", path=f"{ARTIFACTS_ROOT}//notes//a.txt", content="x"
+    )
     assert wf_doubles.path == f"{ARTIFACTS_ROOT}/notes/a.txt"
 
     # Plan name trimming
@@ -120,7 +130,11 @@ def test_models_validation_only():
     plan_dict = {
         "name": "dict plan",
         "steps": [
-            {"op": "Fetch", "url": "https://example.com", "save_as": f"{ARTIFACTS_ROOT}/web/x.txt"},
+            {
+                "op": "Fetch",
+                "url": "https://example.com",
+                "save_as": f"{ARTIFACTS_ROOT}/web/x.txt",
+            },
             {"op": "WriteFile", "path": "./artifacts/notes/a.txt", "content": "ok"},
             {"op": "Run", "target": "governor.one_cycle"},
         ],
@@ -139,11 +153,15 @@ def test_models_validation_only():
         WriteFile(op="WriteFile", path="artifacts/.", content="x")
 
     # '.' segment is normalized away
-    wf_dot = WriteFile(op="WriteFile", path=f"{ARTIFACTS_ROOT}/./notes/a.txt", content="x")
+    wf_dot = WriteFile(
+        op="WriteFile", path=f"{ARTIFACTS_ROOT}/./notes/a.txt", content="x"
+    )
     assert wf_dot.path == f"{ARTIFACTS_ROOT}/notes/a.txt"
 
     # Leading './' also normalizes (already covered indirectly, but lock it)
-    wf_leading_dot = WriteFile(op="WriteFile", path=f"./{ARTIFACTS_ROOT}/notes/a.txt", content="x")
+    wf_leading_dot = WriteFile(
+        op="WriteFile", path=f"./{ARTIFACTS_ROOT}/notes/a.txt", content="x"
+    )
     assert wf_leading_dot.path == f"{ARTIFACTS_ROOT}/notes/a.txt"
 
     # Parent at end should be rejected
